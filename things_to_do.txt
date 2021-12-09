@@ -1,0 +1,4 @@
+1 Change names of roshan and ksd-roshan_WGS to CAPG_Amplicon to CAPG_WGS 
+
+2) Add user control options  to select what posotions to genotype in both CAPG_Amplicon and CAPG_WGS
+

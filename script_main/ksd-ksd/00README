@@ -1,0 +1,108 @@
+Fri Jan 11 13:03:33 CST 2019
+Note that trim.c and em.c are not yet compilable and not yet under version control.   See /home/kdorman/teaching/stat580/spring18/inclass/algorithms/trim/ for a working version?
+
+Tue Oct  9 17:34:54 CDT 2018
+= Using the simulator:
+# Simulate under mlogit model (currently beta is fixed) with 5 haplotypes simulated to differ at 1% of positions using quality scores (and size of data) from the named fastq file.
+# Store simulate fastq data in tmp.fastq, simulation information in tmp.out
+# Estimate mlogit model using one random initialization, with reads assigned to seeds by loglikelihood under literal quality model.
+./run_ampliclust -i 1 -p mlogit -ktrue 5 -sp mlogit -i quality -c 0.01 -k 5 -d tmp.fastq -s tmp.out -f SRR2990088_1_noN.ss400.fastq
+# As above, but initialize with the true parameter values
+./run_ampliclust -i 1 -p mlogit -ktrue 5 -sp mlogit -i true -c 0.01 -k 5 -d tmp.fastq -s tmp.out -f SRR2990088_1_noN.ss400.fastq
+# As above, but initialize with true partition ([TODO] appears to be buggy)
+./run_ampliclust -i 1 -p mlogit -ktrue 5 -sp mlogit -i truepart -c 0.01 -k 5 -d tmp.fastq -s tmp.out -f SRR2990088_1_noN.ss400.fastq
+# As above, but fit with ampliclust model
+./run_ampliclust -i 10 -ktrue 5 -sp mlogit -i quality -c 0.01 -k 5 -d tmp.fastq -s tmp.out -f SRR2990088_1_noN.ss400.fastq
+# Back to fitting with mlogit model, but randomize the qualities.
+./run_ampliclust -i 1 -p mlogit -ktrue 5 -sp mlogit -i true -c 0.01 -k 5 -d tmp.fastq -s tmp.out -f SRR2990088_1_noN.ss400.fastq -r quality
+# As above, but simulate nucleotide data using the DADA2 error profile and initialize randomly 10 times.
+./run_ampliclust -i 10 -p mlogit -ktrue 5 -i quality -c 0.01 -k 5 -d tmp.fastq -s tmp.out -f SRR2990088_1_noN.ss400.fastq -sdada2 Illumina_profiles/DADA2_mock_error_x1000_file.csv
+# As above, but fit ampliclust model
+./run_ampliclust -i 10 -ktrue 5 -i quality -c 0.01 -k 5 -d tmp.fastq -s tmp.out -f SRR2990088_1_noN.ss400.fastq -sdada2 Illumina_profiles/DADA2_mock_error_x1000_file.csv
+# As above, but initialize with true partition (shows that maximizing likelihood under amliclust is not a good idea?)
+./run_ampliclust -i truep -ktrue 5 -c 0.01 -k 5 -d tmp.fastq -s tmp.out -f SRR2990088_1_noN.ss400.fastq -sdada2 Illumina_profiles/DADA2_mock_error_x1000_file.csv
+# As above, but fit dada2 model
+./run_ampliclust -p dada2 -i 10 -ktrue 5 -c 0.01 -k 5 -d tmp.fastq -s tmp.out -f SRR2990088_1_noN.ss400.fastq -sdada2 Illumina_profiles/DADA2_mock_error_x1000_file.csv
+# As above, but initialize with true partition
+./run_ampliclust -p dada2 -i truep -ktrue 5 -c 0.01 -k 5 -d tmp.fastq -s tmp.out -f SRR2990088_1_noN.ss400.fastq -sdada2 Illumina_profiles/DADA2_mock_error_x1000_file.csv
+# Simulate 1000 sequences of 150bp from 5 haplotypes as above, but using the named ART Illumina error profile.
+./run_ampliclust -i 10 -p mlogit -ktrue 5 -i quality -c 0.01 -k 5 -s 1000 150 --sart Illumina_profiles/MiSeqv3L250R1.txt
+# As above, but estimate using ampliclust model
+./run_ampliclust -i 1 -ktrue 5 -i quality -c 0.01 -k 5 -d tmp.fastq -s tmp.out -s 1000 250 --sart Illumina_profiles/MiSeqv3L250R1.txt
+# As above, but fewer sequences and initialize with true partition
+./run_ampliclust -i truep -ktrue 5 -c 0.01 -k 5 -d tmp.fastq -s tmp.out -s 100 250 --sart Illumina_profiles/MiSeqv3L250R1.txt
+# As above, but estimate under ART model (noticed it takes the art model from the simulator: you can use another with --art)
+./run_ampliclust -i 10 -p art -ktrue 5 -c 0.01 -k 5 -d tmp.fastq -s tmp.out -s 100 250 --sart Illumina_profiles/MiSeqv3L250R1.txt
+# Demonstrating the use of two different profiles for simulation and estimation
+./run_ampliclust -i 10 -art Illumina_profiles/MiSeqv3L250R2.txt -ktrue 5 -c 0.01 -k 5 -d tmp.fastq -s tmp.out -s 100 250 --sart Illumina_profiles/MiSeqv3L250R1.txt
+# As above, but initialize with true partition
+./run_ampliclust -i truep -p art -ktrue 5 -c 0.01 -k 5 -d tmp.fastq -s tmp.out -s 100 250 --sart Illumina_profiles/MiSeqv3L250R1.txt
+# As above, but initialize with true paramters
+./run_ampliclust -i true -p art -ktrue 5 -c 0.01 -k 5 -d tmp.fastq -s tmp.out -s 100 250 --sart Illumina_profiles/MiSeqv3L250R1.txt
+# As above, but estimate under ampliclust model with true or random initialization
+./run_ampliclust -i truep -ktrue 5 -c 0.01 -k 5 -d tmp.fastq -s tmp.out -s 1000 250 --sart Illumina_profiles/MiSeqv3L250R1.txt
+/run_ampliclust -i 10 -ktrue 5 -c 0.01 -k 5 -d tmp.fastq -s tmp.out -s 100 250 --sart Illumina_profiles/MiSeqv3L250R1.txt
+# Same as art simulations above, but use different ART profile for every true nucleotide
+./run_ampliclust -i 10 -p mlogit -ktrue 5 -i quality -c 0.01 -k 5 -s 1000 150 --sart Illumina_profiles/MiSeqv3L250R1.txt 1
+# Simulate under quality model, using quality scores from provided file
+./run_ampliclust -i 1 -p mlogit -ktrue 5 -sp quality -i quality -c 0.01 -k 5 -d tmp.fastq -s tmp.out -f SRR2990088_1_noN.ss400.fastq
+# As above, but randomize qualities
+./run_ampliclust -i 1 -p mlogit -ktrue 5 -sp quality -i quality -c 0.01 -k 5 -d tmp.fastq -s tmp.out -f SRR2990088_1_noN.ss400.fastq -r quality
+# As above, but fit quality model
+./run_ampliclust -i 1 -p quality -ktrue 5 -sp quality -i quality -c 0.01 -k 5 -d tmp.fastq -s tmp.out -f SRR2990088_1_noN.ss400.fastq -r quality
+./run_ampliclust -i true -p quality -ktrue 5 -sp quality -c 0.01 -k 5 -d tmp.fastq -s tmp.out -f SRR2990088_1_noN.ss400.fastq -r quality
+# As above, but fit art model: not surprising it does not work because ART model disallows certain qualities
+./run_ampliclust -i 1 -art Illumina_profiles/MiSeqv3L250R1.txt -ktrue 5 -sp quality -i quality -c 0.01 -k 5 -d tmp.fastq -s tmp.out -f SRR2990088_1_noN.ss400.fastq -r quality
+./run_ampliclust -i true -art Illumina_profiles/MiSeqv3L250R1.txt -ktrue 5 -sp quality -c 0.01 -k 5 -d tmp.fastq -s tmp.out -f SRR2990088_1_noN.ss400.fastq -r quality
+# As above, but fit dada2 model
+./run_ampliclust -i 10 -dada2 Illumina_profiles/DADA2_mock_error_x1000_file.csv -ktrue 5 -sp quality -i quality -c 0.01 -k 5 -d tmp.fastq -s tmp.out -f SRR2990088_1_noN.ss400.fastq -r quality
+./run_ampliclust -i truep -dada2 Illumina_profiles/DADA2_mock_error_x1000_file.csv -ktrue 5 -sp quality -i quality -c 0.01 -k 5 -d tmp.fastq -s tmp.out -f SRR2990088_1_noN.ss400.fastq -r quality
+# As above, but fit ampliclust model
+./run_ampliclust -i 10 -ktrue 5 -sp quality -i quality -c 0.01 -k 5 -d tmp.fastq -s tmp.out -f SRR2990088_1_noN.ss400.fastq -r quality
+./run_ampliclust -i truep -ktrue 5 -sp quality -c 0.01 -k 5 -d tmp.fastq -s tmp.out -f SRR2990088_1_noN.ss400.fastq -r quality
+
+# Exploratory: simulate under quality model, but also estimate mixing proportions from data
+# To estimate simulation mixing proportions, need to estimate clusters in the provided data file, so it request 100 random initializations
+./run_ampliclust -i truep -ktrue 5 -sp quality -c 0.01 -k 5 -d tmp.fastq -s tmp.out -f SRR2990088_1_noN.ss400.fastq mixing -r quality -si 100 -si quality
+# DEBUGGING: this command dumps with a bug
+./run_ampliclust -i 10 -ktrue 5 -sart Illumina_profiles/MiSeqv3L250R2.txt -c 0.01 -k 5 -d tmp.fastq -s tmp.out -f SRR2990088_1_noN.ss400.fastq nucleotides -r quality -si 100 -si quality -sk 10
+
+
+
+Tue Jul 17 23:51:14 CDT 2018
+= To run imdeblur:
+./run_ampliclust -s 3000 251 tmp.sim.out --ktrue 12 -m dada2 -c 1 --ancestor TACGTAGGGGGCAAGCGTTATCCGGATTTACTGGGTGTAAAGGGAGCGTAGACGGTGATGTAAGTCAGATGTGAAAGCCCGGGGCTCAACCCCGGGACTGCATTTGAAACTATGTTGCTAGAGTGCAGGAGAGGTAAGTGGAATTCCTAGTGTAGCGGTGAAATGCGTAGATATTAGGAGGAACACCAGTGGCGAAGGCGGCTTACTGGACTGTAACTGACGTTGAGGCTCGAAAGCGTGGGGAGCAAACA -o tmp.res.out -a 1 -i imdeblur -i 0 -d tmp.fsa -r $RANDOM -k 15
+
+Sat Dec  9 14:27:43 CST 2017
+= To compile run_kmodes:
+gcc -DRUN_KMODES=1 -Wall -Wextra -Wpedantic -O3 -o run_kmodes run_kmodes.c error.c cmdline.c io.c kmodes.c math.c cluster.c statistics.c order.c util.c timing_mach.c matrix_exponential.c r8lib.c  -lm -lncurses -lRmath
+= To run: see
+./run_kmodes -h
+
+Sun Jul 23 12:19:35 CDT 2017
+= To compile fqmorph:
+gcc -Wall -Wextra -Wpedantic -O3 -o fqmorph fqmorph.c fastq.c align.c error.c cmdline.c order.c util.c -lcurses -lm
+= To run: see
+./fqmorph -h
+
+Thu Oct  5 13:40:17 CDT 2017
+= To compile ampliclust:
+gcc -Wall -Wextra -Wpedantic -O3 -o run_ampliclust run_ampliclust.c ampliclust.c aecm.c fastq.c error.c cmdline.c io.c kmodes.c math.c cluster.c statistics.c align.c order.c util.c options.c model.c data.c simulate.c initialize.c stages.c hash.c sample.c matrix_exponential.c r8lib.c -lm -lcurses -lRmath
+= To run: see
+./run_ampliclust -h
+= Example run (on hashi):
+with input K:
+ ./run_ampliclust -k 8 -f /home/kdorman/git/ampliclust/data/real/hiv/SRR2241783_2.noN.filtered.fastq -o test.out -w --run ini-em 20 -r 123 -i random
+without input K:
+ ./run_ampliclust --kmin 2 --kmax 15 -f /home/kdorman/git/ampliclust/data/real/hiv/SRR2241783_2.noN.filtered.fastq -o test.out -n -w --run ini-em 20 -r 123 -i random
+multi-stage method (test):
+./run_ampliclust -f /home/kdorman/git/ampliclust/data/real/hiv/SRR2241783_2.noN.filtered.fastq -o test.out -n -y --run ini-em 3 -r 123 -i random -i 2 -x 1000
+Previous Simulation (quality model):
+given ancestor:
+./run_ampliclust --ktrue 12 -f SRR2990088_1_noN_3000_subset1_new.fastq -anc TACGGAGGATCCGAGCGTTATCCGGATTTATTGGGTTTAAAGGGAGCGTAGGCGGATGTTTAAGTCAGTTGTGAAAGTTTGCGGCTCAACCGTAAAATTGCAGTTGAAACTGGGTGTCTTGAGTGCAGTAGAGGTAGGCGGAATTCGTGGTGTAGCGGTGAAATGCTTAGATATCACGAAGAACTCCGATTGCGAAGGCAGCTTACTAGACTGTAACTGACATTGATGCTCGAAAGTGTGGGTATCAAACA -i 0 -r 123 -s SRR2990088_1_noN_3000_subset1_new.K12.seeded.fsa:SRR2990088_1_noN_3000_subset1_new.K12.seeded.id sim3.9.K12.truth.out -m quality -d sim3.9.1.fastq -c 0.02
+without ancestor:
+/run_ampliclust --ktrue 12 -f SRR2990088_1_noN_3000_subset1_new.fastq -i 0 -r 123 -s SRR2990088_1_noN_3000_subset1_new.K12.seeded.fsa:SRR2990088_1_noN_3000_subset1_new.K12.seeded.id sim3.9.K12.truth.out -m quality -d sim3.9.1.fastq
+
+TODO
+- fix call to read_fastq given updates in fastq.c
+- allow reading of comment line

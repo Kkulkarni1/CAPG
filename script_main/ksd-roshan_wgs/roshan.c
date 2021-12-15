@@ -45,238 +45,238 @@ unsigned int ns_key_len = 3 * sizeof(data_t) + sizeof(unsigned int);
 /**
  * Test equal coverage of homologous chromosomes.
  *
- * @param mh        merged hash of aligned reads
- * @param ll        log likelihood of reads aligned to each subgenome
- * @param ref_base    reference bases
- * @param covers    indicate if retained reads cover the site
- * @param obs_nuc    observed nucleotides in reads covering the site
- * @param obs_q        observed quality scores of nucleotides covering the site
- * @param obs_rpos    other information for error model
- * @param g_max        the genotype call
- * @param nuc1        the major allele
- * @param nuc2        the minor allele
- * @param debug_level    inherited debugging level
- * @param pvals        up to two pvals
- * @return        error status
+ * @param mh		merged hash of aligned reads
+ * @param ll		log likelihood of reads aligned to each subgenome
+ * @param ref_base	reference bases
+ * @param covers	indicate if retained reads cover the site
+ * @param obs_nuc	observed nucleotides in reads covering the site
+ * @param obs_q		observed quality scores of nucleotides covering the site
+ * @param obs_rpos	other information for error model
+ * @param g_max		the genotype call
+ * @param nuc1		the major allele
+ * @param nuc2		the minor allele
+ * @param debug_level	inherited debugging level
+ * @param pvals		up to two pvals
+ * @return		error status
  */
 int test_equal_homolog_coverage(merge_hash *mh, double **all,
-    char_t ref_base[N_FILES], char *covers, xy_t *obs_nuc,
-    qual_t *obs_q, unsigned int *obs_rpos, int g_max[N_FILES],
-    xy_t nuc1, xy_t nuc2, int debug_level, double pvals[N_FILES])
+	char_t ref_base[N_FILES], char *covers, xy_t *obs_nuc,
+	qual_t *obs_q, unsigned int *obs_rpos, int g_max[N_FILES],
+	xy_t nuc1, xy_t nuc2, int debug_level, double pvals[N_FILES])
 {
-    mlogit_stuff mls = {NULL, 0};
-    double epsilon = 1e-6;
-    double gamma[N_FILES] = {g_max[0]/2., g_max[1]/2.};
-    double eta = 0.5;    /* assumes N_FILES == 2 */
-    double new_gamma[N_FILES];
-    double new_eta;
-    double lpi[2*N_FILES];
-    double ll1;
-    double ll = -INFINITY, pll;
-    double pp[2*N_FILES], cll[2*N_FILES];
-    double log_half = log(0.5);
-    size_t n_cover, n_read;
-    unsigned int iter = 0, max_iter = 100;
+	mlogit_stuff mls = {NULL, 0};
+	double epsilon = 1e-6;
+	double gamma[N_FILES] = {g_max[0]/2., g_max[1]/2.};
+	double eta = 0.5;	/* assumes N_FILES == 2 */
+	double new_gamma[N_FILES];
+	double new_eta;
+	double lpi[2*N_FILES];
+	double ll1;
+	double ll = -INFINITY, pll;
+	double pp[2*N_FILES], cll[2*N_FILES];
+	double log_half = log(0.5);
+	size_t n_cover, n_read;
+	unsigned int iter = 0, max_iter = 100;
 
-    /* estimate log likelihood under H1 */
-    do {
-        /* initialize log likelihood */
-        pll = ll;
-        ll = 0;
+	/* estimate log likelihood under H1 */
+	do {
+		/* initialize log likelihood */
+		pll = ll;
+		ll = 0;
 
-        /* compute current mixing proportions */
-        lpi[0] = lpi[1] = log(eta);
-        if (g_max[0] == 1) {
-            lpi[0] += log(gamma[0]);
-            lpi[1] += log(1 - gamma[0]);
-        }
-        lpi[2] = lpi[3] = log(1 - eta);
-        if (g_max[1] == 1) {
-            lpi[2] += log(gamma[1]);
-            lpi[3] += log(1 - gamma[1]);
-        }
+		/* compute current mixing proportions */
+		lpi[0] = lpi[1] = log(eta);
+		if (g_max[0] == 1) {
+			lpi[0] += log(gamma[0]);
+			lpi[1] += log(1 - gamma[0]);
+		}
+		lpi[2] = lpi[3] = log(1 - eta);
+		if (g_max[1] == 1) {
+			lpi[2] += log(gamma[1]);
+			lpi[3] += log(1 - gamma[1]);
+		}
 
-        new_eta = 0;
-        new_gamma[0] = 0;
-        new_gamma[1] = 0;    /* N_FILES == 2 */
-        n_cover = 0;
-        n_read = 0;
+		new_eta = 0;
+		new_gamma[0] = 0;
+		new_gamma[1] = 0;	/* N_FILES == 2 */
+		n_cover = 0;
+		n_read = 0;
 
-        double total1 = 0, total2 = 0;
+		double total1 = 0, total2 = 0;
 
-        for (merge_hash *me = mh; me != NULL; me = me->hh.next) {
+		for (merge_hash *me = mh; me != NULL; me = me->hh.next) {
 
-            /* skip excluded reads */
-            if (me->exclude)
-                continue;
+			/* skip excluded reads */
+			if (me->exclude)
+				continue;
 
-            /* skip read not covering site */
-            if (!covers[n_read]) {
-                ++n_read;
-                continue;
-            }
+			/* skip read not covering site */
+			if (!covers[n_read]) {
+				++n_read;
+				continue;
+			}
 
-            mls.pos = obs_rpos[n_cover];
+			mls.pos = obs_rpos[n_cover];
 
-            double max = 0;
+			double max = 0;
 
-            for (int i = 0; i < 2*N_FILES; ++i) {
+			for (int i = 0; i < 2*N_FILES; ++i) {
 
-                cll[i] = lpi[i] + all[i/2][n_read]
-                    - sub_prob_given_q_with_encoding(
-                        ref_base[i/2],                /* homozygous ref base */
-                        obs_nuc[n_cover], IUPAC_ENCODING, XY_ENCODING, obs_q[n_cover], 1, (void *)&mls)
-                    + sub_prob_given_q_with_encoding(
-                         !g_max[i/2] ? xy_to_iupac[nuc1]    /* new genotype */
-                        : g_max[i/2] == 2 ? xy_to_iupac[nuc2]
-                        : !(i%2) ? xy_to_iupac[nuc1] : xy_to_iupac[nuc2],
-                        obs_nuc[n_cover], IUPAC_ENCODING, XY_ENCODING, obs_q[n_cover], 1, (void *)&mls);
-    
-                if (cll[i] > max)
-                    max = cll[i];
-            }
+				cll[i] = lpi[i] + all[i/2][n_read]
+					- sub_prob_given_q_with_encoding(
+						ref_base[i/2],				/* homozygous ref base */
+						obs_nuc[n_cover], IUPAC_ENCODING, XY_ENCODING, obs_q[n_cover], 1, (void *)&mls)
+					+ sub_prob_given_q_with_encoding(
+						 !g_max[i/2] ? xy_to_iupac[nuc1]	/* new genotype */
+						: g_max[i/2] == 2 ? xy_to_iupac[nuc2]
+						: !(i%2) ? xy_to_iupac[nuc1] : xy_to_iupac[nuc2],
+						obs_nuc[n_cover], IUPAC_ENCODING, XY_ENCODING, obs_q[n_cover], 1, (void *)&mls);
+	
+				if (cll[i] > max)
+					max = cll[i];
+			}
 
-            double sum = 0;
-            for (int i = 0; i < 2*N_FILES; ++i) {
-                pp[i] = exp(cll[i] - max);
-                sum += pp[i];
-            }
-            for (int i = 0; i < 2*N_FILES; ++i)
-                pp[i] /= sum;
-            new_eta += pp[0] + pp[1];
-            if (g_max[0] == 1) {
-                new_gamma[0] += pp[0];
-                total1 += pp[0] + pp[1];
-            }
-            if (g_max[1] == 1) {
-                new_gamma[1] += pp[2];
-                total2 += pp[2] + pp[3];
-            }
+			double sum = 0;
+			for (int i = 0; i < 2*N_FILES; ++i) {
+				pp[i] = exp(cll[i] - max);
+				sum += pp[i];
+			}
+			for (int i = 0; i < 2*N_FILES; ++i)
+				pp[i] /= sum;
+			new_eta += pp[0] + pp[1];
+			if (g_max[0] == 1) {
+				new_gamma[0] += pp[0];
+				total1 += pp[0] + pp[1];
+			}
+			if (g_max[1] == 1) {
+				new_gamma[1] += pp[2];
+				total2 += pp[2] + pp[3];
+			}
 
-            ll += log(sum) + max;
+			ll += log(sum) + max;
 
-            ++n_cover;
-            ++n_read;
-        }
-        eta = new_eta / n_cover;
-        if (g_max[0] == 1)
-            gamma[0] = new_gamma[0] / total1;
-        if (g_max[1] == 1)
-            gamma[1] = new_gamma[1] / total2;
-        //fprintf(stderr, "eta = %f, gamma1 = %f, gamma2 = %f, ll = %f, rel = %e\n", eta, gamma[0], gamma[1], ll, (pll - ll) / ll);
-    } while (iter++ < max_iter && (ll - pll) > -ll * epsilon);
+			++n_cover;
+			++n_read;
+		}
+		eta = new_eta / n_cover;
+		if (g_max[0] == 1)
+			gamma[0] = new_gamma[0] / total1;
+		if (g_max[1] == 1)
+			gamma[1] = new_gamma[1] / total2;
+		//fprintf(stderr, "eta = %f, gamma1 = %f, gamma2 = %f, ll = %f, rel = %e\n", eta, gamma[0], gamma[1], ll, (pll - ll) / ll);
+	} while (iter++ < max_iter && (ll - pll) > -ll * epsilon);
 
-    ll1 = ll;
+	ll1 = ll;
 
-    for (int j = 0; j < N_FILES; ++j) {
-        if (g_max[j] != 1)
-            continue;
+	for (int j = 0; j < N_FILES; ++j) {
+		if (g_max[j] != 1)
+			continue;
 
-    do {
-        /* initialize log likelihood */
-        pll = ll;
-        ll = 0;
+	do {
+		/* initialize log likelihood */
+		pll = ll;
+		ll = 0;
 
-        /* compute current mixing proportions */
-        lpi[0] = lpi[1] = log(eta);
-        if (g_max[0] == 1) {
-            if (!j) {
-                lpi[0] += log_half;
-                lpi[1] += log_half;
-            } else {
-                lpi[0] += log(gamma[0]);
-                lpi[1] += log(1 - gamma[0]);
-                new_gamma[0] = 0;
-            }
-        }
-        lpi[2] = lpi[3] = log(1 - eta);
-        if (g_max[1] == 1) {
-            if (j) {
-                lpi[2] += log_half;
-                lpi[3] += log_half;
-            } else {
-                lpi[2] += log(gamma[1]);
-                lpi[3] += log(1 - gamma[1]);
-                new_gamma[1] = 0;
-            }
-        }
+		/* compute current mixing proportions */
+		lpi[0] = lpi[1] = log(eta);
+		if (g_max[0] == 1) {
+			if (!j) {
+				lpi[0] += log_half;
+				lpi[1] += log_half;
+			} else {
+				lpi[0] += log(gamma[0]);
+				lpi[1] += log(1 - gamma[0]);
+				new_gamma[0] = 0;
+			}
+		}
+		lpi[2] = lpi[3] = log(1 - eta);
+		if (g_max[1] == 1) {
+			if (j) {
+				lpi[2] += log_half;
+				lpi[3] += log_half;
+			} else {
+				lpi[2] += log(gamma[1]);
+				lpi[3] += log(1 - gamma[1]);
+				new_gamma[1] = 0;
+			}
+		}
 
-        new_eta = 0;
-        n_cover = 0;
-        n_read = 0;
+		new_eta = 0;
+		n_cover = 0;
+		n_read = 0;
 
-        double total1 = 0, total2 = 0;
+		double total1 = 0, total2 = 0;
 
-        for (merge_hash *me = mh; me != NULL; me = me->hh.next) {
+		for (merge_hash *me = mh; me != NULL; me = me->hh.next) {
 
-            /* skip excluded reads */
-            if (me->exclude)
-                continue;
+			/* skip excluded reads */
+			if (me->exclude)
+				continue;
 
-            /* skip read not covering site */
-            if (!covers[n_read]) {
-                ++n_read;
-                continue;
-            }
+			/* skip read not covering site */
+			if (!covers[n_read]) {
+				++n_read;
+				continue;
+			}
 
-            mls.pos = obs_rpos[n_cover];
+			mls.pos = obs_rpos[n_cover];
 
-            double max = 0;
+			double max = 0;
 
-            for (int i = 0; i < 2*N_FILES; ++i) {
+			for (int i = 0; i < 2*N_FILES; ++i) {
 
-                cll[i] = lpi[i] + all[i/2][n_read]
-                    - sub_prob_given_q_with_encoding(
-                        ref_base[i/2],                /* homozygous ref base */
-                        obs_nuc[n_cover], IUPAC_ENCODING, XY_ENCODING, obs_q[n_cover], 1, (void *)&mls)
-                    + sub_prob_given_q_with_encoding(
-                         !g_max[i/2] ? xy_to_iupac[nuc1]    /* new genotype */
-                        : g_max[i/2] == 2 ? xy_to_iupac[nuc2]
-                        : !(i%2) ? xy_to_iupac[nuc1] : xy_to_iupac[nuc2],
-                        obs_nuc[n_cover], IUPAC_ENCODING, XY_ENCODING, obs_q[n_cover], 1, (void *)&mls);
-    
-                if (cll[i] > max)
-                    max = cll[i];
-            }
+				cll[i] = lpi[i] + all[i/2][n_read]
+					- sub_prob_given_q_with_encoding(
+						ref_base[i/2],				/* homozygous ref base */
+						obs_nuc[n_cover], IUPAC_ENCODING, XY_ENCODING, obs_q[n_cover], 1, (void *)&mls)
+					+ sub_prob_given_q_with_encoding(
+						 !g_max[i/2] ? xy_to_iupac[nuc1]	/* new genotype */
+						: g_max[i/2] == 2 ? xy_to_iupac[nuc2]
+						: !(i%2) ? xy_to_iupac[nuc1] : xy_to_iupac[nuc2],
+						obs_nuc[n_cover], IUPAC_ENCODING, XY_ENCODING, obs_q[n_cover], 1, (void *)&mls);
+	
+				if (cll[i] > max)
+					max = cll[i];
+			}
 
-            double sum = 0;
-            for (int i = 0; i < 2*N_FILES; ++i) {
-                pp[i] = exp(cll[i] - max);
-                sum += pp[i];
-            }
-            for (int i = 0; i < 2*N_FILES; ++i)
-                pp[i] /= sum;
-            new_eta += pp[0] + pp[1];
-            if (j && g_max[0] == 1) {
-                new_gamma[0] += pp[0];
-                total1 += pp[0] + pp[1];
-            }
-            if (!j && g_max[1] == 1) {
-                new_gamma[1] += pp[2];
-                total2 += pp[2] + pp[3];
-            }
+			double sum = 0;
+			for (int i = 0; i < 2*N_FILES; ++i) {
+				pp[i] = exp(cll[i] - max);
+				sum += pp[i];
+			}
+			for (int i = 0; i < 2*N_FILES; ++i)
+				pp[i] /= sum;
+			new_eta += pp[0] + pp[1];
+			if (j && g_max[0] == 1) {
+				new_gamma[0] += pp[0];
+				total1 += pp[0] + pp[1];
+			}
+			if (!j && g_max[1] == 1) {
+				new_gamma[1] += pp[2];
+				total2 += pp[2] + pp[3];
+			}
 
-            ll += log(sum) + max;
+			ll += log(sum) + max;
 
-            ++n_cover;
-            ++n_read;
-        }
-        eta = new_eta / n_cover;
-        if (j && g_max[0] == 1)
-            gamma[0] = new_gamma[0] / total1;
-        if (!j && g_max[1] == 1)
-            gamma[1] = new_gamma[1] / total2;
-        //fprintf(stderr, "eta = %f, gamma1 = %f, gamma2 = %f, ll = %f, rel = %e\n", eta, (g_max[0] && j) ? gamma[0] : 0.5, (g_max[1] && !j) ? gamma[1] : 0.5, ll, (pll - ll) / ll);
-    } while (iter++ < max_iter && (ll - pll) > -ll * epsilon);
+			++n_cover;
+			++n_read;
+		}
+		eta = new_eta / n_cover;
+		if (j && g_max[0] == 1)
+			gamma[0] = new_gamma[0] / total1;
+		if (!j && g_max[1] == 1)
+			gamma[1] = new_gamma[1] / total2;
+		//fprintf(stderr, "eta = %f, gamma1 = %f, gamma2 = %f, ll = %f, rel = %e\n", eta, (g_max[0] && j) ? gamma[0] : 0.5, (g_max[1] && !j) ? gamma[1] : 0.5, ll, (pll - ll) / ll);
+	} while (iter++ < max_iter && (ll - pll) > -ll * epsilon);
 
-    double lrt = 2 * (ll1 - ll);
-    pvals[j] = pchisq(lrt, 1, 0, 0);
-    debug_msg(debug_level > QUIET, debug_level,
-        "Equal coverage test: eta = %f; gamma1 = %f; gamma2 = %f; lrt = %f (%f %f); pval = %e\n",
-        eta, j && g_max[0] == 1 ? gamma[0] : g_max[0] / 2., !j && g_max[1] == 1 ? gamma[1] : g_max[1] / 2., 2 * (ll1 - ll), ll1, ll, pvals[j]);
-    }
+	double lrt = 2 * (ll1 - ll);
+	pvals[j] = pchisq(lrt, 1, 0, 0);
+	debug_msg(debug_level > QUIET, debug_level,
+		"Equal coverage test: eta = %f; gamma1 = %f; gamma2 = %f; lrt = %f (%f %f); pval = %e\n",
+		eta, j && g_max[0] == 1 ? gamma[0] : g_max[0] / 2., !j && g_max[1] == 1 ? gamma[1] : g_max[1] / 2., 2 * (ll1 - ll), ll1, ll, pvals[j]);
+	}
 
-    return 0;
+	return 0;
 } /* test_equal_homolog_coverage */
 
 /**
@@ -284,167 +284,167 @@ int test_equal_homolog_coverage(merge_hash *mh, double **all,
  * filter(s) are indicated in fail, currently only segregating sites.
  * To identify the offending sites, the 0-based position is in hpos.
  *
- * @param opt    options object pointer
- * @param fail    failed segregating sites for each subgenome
- * @param hpos    position of segregating sites
- * @error    error status
+ * @param opt	options object pointer
+ * @param fail	failed segregating sites for each subgenome
+ * @param hpos	position of segregating sites
+ * @error	error status
  */
 int update_vcf(options *opt, int *fail[N_FILES],
-                size_t *hpos[N_FILES])
+				size_t *hpos[N_FILES])
 {
-    const char *tmpfile_template = "tmp_vcfXXXXXX";
+	const char *tmpfile_template = "tmp_vcfXXXXXX";
 
-    for (int i = 0; i < N_FILES; ++i) {
-        unsigned int nsegregating = 0;
-        int fpd;
-        char *tmpfile = NULL;
-        FILE *fpr = NULL;
-        FILE *fpt = NULL;
+	for (int i = 0; i < N_FILES; ++i) {
+		unsigned int nsegregating = 0;
+		int fpd;
+		char *tmpfile = NULL;
+		FILE *fpr = NULL;
+		FILE *fpt = NULL;
 
-        if (!opt->vcf_files[i])
-            continue;
+		if (!opt->vcf_files[i])
+			continue;
 
-        if (!fail[i])
-            continue;
+		if (!fail[i])
+			continue;
 
-        fpr = fopen(opt->vcf_files[i], "r");
+		fpr = fopen(opt->vcf_files[i], "r");
 
-        if (!fpr)
-            return mmessage(ERROR_MSG, FILE_OPEN_ERROR,
-                            opt->vcf_files[i]);
+		if (!fpr)
+			return mmessage(ERROR_MSG, FILE_OPEN_ERROR,
+							opt->vcf_files[i]);
 
-        tmpfile = malloc((strlen(tmpfile_template) + 1)
-                            * sizeof *tmpfile);
+		tmpfile = malloc((strlen(tmpfile_template) + 1)
+							* sizeof *tmpfile);
 
-        if (!tmpfile)
-            return mmessage(ERROR_MSG, MEMORY_ALLOCATION,
-                                "tmpfile");
+		if (!tmpfile)
+			return mmessage(ERROR_MSG, MEMORY_ALLOCATION,
+								"tmpfile");
 
-        strcpy(tmpfile, tmpfile_template);
+		strcpy(tmpfile, tmpfile_template);
 
-        fpd = mkstemp(tmpfile);
-        fpt = fdopen(fpd, "w");
+		fpd = mkstemp(tmpfile);
+		fpt = fdopen(fpd, "w");
 
-        if (!fpt)
-            return mmessage(ERROR_MSG, FILE_OPEN_ERROR, tmpfile);
+		if (!fpt)
+			return mmessage(ERROR_MSG, FILE_OPEN_ERROR, tmpfile);
 
-        char c;
-        while (!feof(fpr)) {
-            unsigned int pos;
-            int already_filtered = 0;
-            const char *pass = "PASS";
+		char c;
+		while (!feof(fpr)) {
+			unsigned int pos;
+			int already_filtered = 0;
+			const char *pass = "PASS";
 
-            c = fgetc(fpr);
+			c = fgetc(fpr);
 
-            if (feof(fpr))
-                break;
+			if (feof(fpr))
+				break;
 
-            /* copy header */
-            while (!feof(fpr) && c == '#') {
-                fputc(c, fpt);    /* leading # */
-                while (!feof(fpr) && (c = fgetc(fpr)) != '\n')
-                    fputc(c, fpt);
-                fputc(c, fpt);    /* newline */
-                c = fgetc(fpr);
-            }
+			/* copy header */
+			while (!feof(fpr) && c == '#') {
+				fputc(c, fpt);	/* leading # */
+				while (!feof(fpr) && (c = fgetc(fpr)) != '\n')
+					fputc(c, fpt);
+				fputc(c, fpt);	/* newline */
+				c = fgetc(fpr);
+			}
 
-            /* skip first tab-separated columns */
-            fputc(c, fpt);    /* first char or tab */
-            while (!feof(fpr) && (c = fgetc(fpr)) != '\t')
-                fputc(c, fpt);
+			/* skip first tab-separated columns */
+			fputc(c, fpt);	/* first char or tab */
+			while (!feof(fpr) && (c = fgetc(fpr)) != '\t')
+				fputc(c, fpt);
 
-            if (fscanf(fpr, "%u", &pos) != 1)
-                return mmessage(ERROR_MSG, FILE_FORMAT_ERROR,
-                            opt->vcf_files[i]);
+			if (fscanf(fpr, "%u", &pos) != 1)
+				return mmessage(ERROR_MSG, FILE_FORMAT_ERROR,
+							opt->vcf_files[i]);
 
-            fprintf(fpt, "\t%d", pos);
-            c = fgetc(fpr);    /* tab */
+			fprintf(fpt, "\t%d", pos);
+			c = fgetc(fpr);	/* tab */
 
-            /* skip next four tab-separated columns */
-            for (int i = 0; i < 4; ++i) {
-                fputc(c, fpt);    /* first char or tab */
-                while (!feof(fpr) && (c = fgetc(fpr)) != '\t')
-                    fputc(c, fpt);
-            }
-            fputc(c, fpt);    /* tab */
+			/* skip next four tab-separated columns */
+			for (int i = 0; i < 4; ++i) {
+				fputc(c, fpt);	/* first char or tab */
+				while (!feof(fpr) && (c = fgetc(fpr)) != '\t')
+					fputc(c, fpt);
+			}
+			fputc(c, fpt);	/* tab */
 
-            c = fgetc(fpr);    /* read first char in FILTER */
-            if (c == 'P') {    /* maybe PASS */
-                unsigned int cnt = 0;
+			c = fgetc(fpr);	/* read first char in FILTER */
+			if (c == 'P') {	/* maybe PASS */
+				unsigned int cnt = 0;
 
-                /* skip rest of PASS */
-                do {
-                    c = fgetc(fpr);
-                    ++cnt;
-                } while (!feof(fpr) && cnt < strlen("PASS") && pass[cnt] == c);
+				/* skip rest of PASS */
+				do {
+					c = fgetc(fpr);
+					++cnt;
+				} while (!feof(fpr) && cnt < strlen("PASS") && pass[cnt] == c);
 
-                /* nope, something else: output it */
-                if (c != '\t') {
-                    already_filtered = 1;
-                    fprintf(fpt, "PASS%c", c);
-                    while (!feof(fpr) && (c = fgetc(fpr)) != '\t')
-                        fputc(c, fpt);
-                }
-            } else if (c != '.') {    /* other filters */
-                already_filtered = 1;
-                fputc(c, fpt);
-                while (!feof(fpr) && (c = fgetc(fpr)) != '\t')
-                    fputc(c, fpt);
-            } else {
-                c = fgetc(fpr);    /* tab */
-            }
+				/* nope, something else: output it */
+				if (c != '\t') {
+					already_filtered = 1;
+					fprintf(fpt, "PASS%c", c);
+					while (!feof(fpr) && (c = fgetc(fpr)) != '\t')
+						fputc(c, fpt);
+				}
+			} else if (c != '.') {	/* other filters */
+				already_filtered = 1;
+				fputc(c, fpt);
+				while (!feof(fpr) && (c = fgetc(fpr)) != '\t')
+					fputc(c, fpt);
+			} else {
+				c = fgetc(fpr);	/* tab */
+			}
 
-            /* one of the segregating sites */
-            if (pos - 1 == hpos[i][nsegregating]) {
+			/* one of the segregating sites */
+			if (pos - 1 == hpos[i][nsegregating]) {
 
-                /* this one failed: currently just 1 test */
-                if (fail[i][nsegregating]) {
-                    if (already_filtered)
-                        fputc(';', fpt);
+				/* this one failed: currently just 1 test */
+				if (fail[i][nsegregating]) {
+					if (already_filtered)
+						fputc(';', fpt);
 
-                    fprintf(fpt, "sc5");    /* add failed filter */
-                
-                /* otherwise it passed */
-                } else if (!already_filtered) {
-                    fprintf(fpt, "PASS");
-                }
-                ++nsegregating;
+					fprintf(fpt, "sc5");	/* add failed filter */
+				
+				/* otherwise it passed */
+				} else if (!already_filtered) {
+					fprintf(fpt, "PASS");
+				}
+				++nsegregating;
 
-            /* non-segregating site, not filtered by us */
-            } else if (!already_filtered) {
-                fprintf(fpt, "PASS");
-            }
+			/* non-segregating site, not filtered by us */
+			} else if (!already_filtered) {
+				fprintf(fpt, "PASS");
+			}
 
-            fputc(c, fpt);        /* tab after FILTER */
-            while (!feof(fpr) && (c = fgetc(fpr)) != '\n')
-                fputc(c, fpt);    /* rest of line */
-            if (!feof(fpr))
-                fputc(c, fpt);    /* newline */
-        }
+			fputc(c, fpt);		/* tab after FILTER */
+			while (!feof(fpr) && (c = fgetc(fpr)) != '\n')
+				fputc(c, fpt);	/* rest of line */
+			if (!feof(fpr))
+				fputc(c, fpt);	/* newline */
+		}
 
-        fclose(fpr);
+		fclose(fpr);
 
-        char *command = malloc((strlen("mv") + strlen(tmpfile_template)
-            + strlen(opt->vcf_files[i]) + 3) * sizeof *command);
+		char *command = malloc((strlen("mv") + strlen(tmpfile_template)
+			+ strlen(opt->vcf_files[i]) + 3) * sizeof *command);
 
-        if (!command) {
-            free(tmpfile);
-            return mmessage(ERROR_MSG, MEMORY_ALLOCATION, "command");
-        }
+		if (!command) {
+			free(tmpfile);
+			return mmessage(ERROR_MSG, MEMORY_ALLOCATION, "command");
+		}
 
-        sprintf(command, "cp %s %s", tmpfile, opt->vcf_files[i]);
+		sprintf(command, "cp %s %s", tmpfile, opt->vcf_files[i]);
 
-        fclose(fpt);
-        system(command);
+		fclose(fpt);
+		system(command);
 
-        sprintf(command, "rm %s", tmpfile);
-        system(command);
+		sprintf(command, "rm %s", tmpfile);
+		system(command);
 
-        free(tmpfile);
-        free(command);
-    }
+		free(tmpfile);
+		free(command);
+	}
 
-    return NO_ERROR;
+	return NO_ERROR;
 } /* update_vcf */
 
 /**
@@ -677,7 +677,7 @@ int main(int argc, const char *argv[])
 		fp = fopen(opt.sbam_files[j], "r");
 		if (!fp)
 			exit(mmessage(ERROR_MSG, FILE_OPEN_ERROR,
-				      opt.sbam_files[j]));
+					  opt.sbam_files[j]));
 		read_sam(fp, &sds[j]);
 		fclose(fp);
 	}
@@ -747,8 +747,8 @@ int main(int argc, const char *argv[])
 		printf("\n");
 		if (!found)
 			exit(mmessage(ERROR_MSG, INVALID_USER_INPUT, "no "
-				      "reference '%s' in fasta file '%s'",
-				      opt.ref_names[j], opt.sbam_files[j]));
+					  "reference '%s' in fasta file '%s'",
+					  opt.ref_names[j], opt.sbam_files[j]));
 		
 		/* hash sam file to reference (use n_se since some references are repeated in the targeted sam file) */
 		/* KSD Now hash sam file to externally-provided references, 
@@ -813,24 +813,24 @@ int main(int argc, const char *argv[])
 			
 			if (me->count[j] > 1)
 				exit(mmessage(ERROR_MSG, INTERNAL_ERROR,
-					      "Read %u aligns twice in genome %s.\n",
-					      j, sds[j]->se[me->indices[j][0]].name_s));
+						  "Read %u aligns twice in genome %s.\n",
+						  j, sds[j]->se[me->indices[j][0]].name_s));
 			
 			n_align += me->count[j];
 			se = &sds[j]->se[me->indices[j][0]];
 			if (start_pos[j] > se->pos - 1)
 				start_pos[j] = se->pos - 1;
 			rf_pos = se->pos - 1;
-//            fprintf(stderr, "%zu ", rf_pos);
+//			fprintf(stderr, "%zu ", rf_pos);
 			for (unsigned int i = 0; i < se->cig->n_ashes; ++i) {
 				if (se->cig->ashes[i].type == CIGAR_DELETION
-				    || se->cig->ashes[i].type == CIGAR_MATCH
-				    || se->cig->ashes[i].type == CIGAR_MMATCH
-				    || se->cig->ashes[i].type == CIGAR_MISMATCH
-				    || se->cig->ashes[i].type == CIGAR_SKIP)
+					|| se->cig->ashes[i].type == CIGAR_MATCH
+					|| se->cig->ashes[i].type == CIGAR_MMATCH
+					|| se->cig->ashes[i].type == CIGAR_MISMATCH
+					|| se->cig->ashes[i].type == CIGAR_SKIP)
 					rf_pos += se->cig->ashes[i].len;
 			}
-//            fprintf(stderr, "%zu |||", rf_pos);
+//			fprintf(stderr, "%zu |||", rf_pos);
 			if (end_pos[j] < rf_pos)
 				end_pos[j] = rf_pos;
 			
@@ -841,7 +841,7 @@ int main(int argc, const char *argv[])
 	
 	if (n_read == 0)
 		exit(mmessage(ERROR_MSG, INTERNAL_ERROR,
-			      "No read aligns to selected genome %s.\n"));
+				  "No read aligns to selected genome %s.\n"));
 
 	for (unsigned int i = 0; i < N_FILES; ++i)
 		mmessage(INFO_MSG, NO_ERROR, "\nFile %u extent relative to the whole genome [0-based:1-based]: %u - %u\n",
@@ -857,7 +857,7 @@ int main(int argc, const char *argv[])
 			  "%u extent: %zu - %zu\n", j, start_pos[j], end_pos[j]);
 		
 		if (j && end_pos[j] - start_pos[j]
-		    != end_pos[j-1] - start_pos[j-1])
+			!= end_pos[j-1] - start_pos[j-1])
 			mmessage(WARNING_MSG, NO_ERROR, "WARNING:  Genome %u "
 				 "and %u alignment regions differ in length.\n",
 				 j, j - 1);
@@ -915,9 +915,9 @@ int main(int argc, const char *argv[])
 		/* read in reference genomes */
 		if ((err = read_fastq(opt_rf.extracted_rf[j], &fds[j], &fop)))
 			exit(mmessage(ERROR_MSG, INTERNAL_ERROR, "Reading '%s' "
-				      "failed with error '%s' (%d).\n",
-				      opt_rf.extracted_rf[j], fastq_error_message(err),
-				      err));
+					  "failed with error '%s' (%d).\n",
+					  opt_rf.extracted_rf[j], fastq_error_message(err),
+					  err));
 	}
 
 	/* compute posterior probability read from each subgenome;
@@ -968,7 +968,7 @@ int main(int argc, const char *argv[])
 		for (unsigned int j = 0; j < N_FILES; ++j) {
 			sum += exp(pp[j][n_read] - max);
 			debug_msg_cont(show || debug_level > QUIET, debug_level,
-				       " %f", pp[j][n_read]);
+					   " %f", pp[j][n_read]);
 		}
 		debug_msg_cont(show || debug_level > QUIET, debug_level, "\n");
 		debug_msg(show || debug_level > QUIET, debug_level, "Probabilities:");
@@ -977,7 +977,7 @@ int main(int argc, const char *argv[])
 		for (unsigned int j = 0; j < N_FILES; ++j) {
 			pp[j][n_read] = exp(pp[j][n_read] - max) / sum;
 			debug_msg_cont(show || debug_level > QUIET, debug_level,
-				       " %f", pp[j][n_read]);
+					   " %f", pp[j][n_read]);
 			if (max_p < pp[j][n_read]) {
 				max_p = pp[j][n_read];
 				max_p_index = j;
@@ -995,7 +995,7 @@ int main(int argc, const char *argv[])
 		debug_msg(debug_level > QUIET, debug_level, "Log Probabilities:");
 		for (unsigned int j = 0; j < N_FILES; ++j)
 			debug_msg_cont(debug_level > QUIET, debug_level, " %f",
-				       log(pp[j][n_read]));
+					   log(pp[j][n_read]));
 		debug_msg_cont(debug_level > QUIET, debug_level, "\n");
 		
 		/* write fastq of selected reads for amplici (now A and B many contain different reads)*/
@@ -1064,7 +1064,7 @@ int main(int argc, const char *argv[])
 		in->n_observation = n_read;
 		
 		unsigned int *new_not_input = realloc(in->not_input,
-						      n_read * sizeof *in->not_input);
+							  n_read * sizeof *in->not_input);
 		if (!new_not_input)
 			return mmessage(ERROR_MSG, MEMORY_ALLOCATION,
 					"(reallocate) not_input (%zu).\n", n_read);
@@ -1153,12 +1153,12 @@ int main(int argc, const char *argv[])
 			free(new_pp);
 			B_expected_coverage = n_read - A_expected_coverage;
 			min_expected_coverage = MIN(A_expected_coverage,
-						    B_expected_coverage);
+							B_expected_coverage);
 			mmessage(INFO_MSG, NO_ERROR, "Updated expected coverage"
 				 ": %f %f (%zu)\n", A_expected_coverage,
 				 B_expected_coverage, n_read);
 			if (A_expected_coverage < opt.min_expected_coverage
-			    || B_expected_coverage < opt.min_expected_coverage)
+				|| B_expected_coverage < opt.min_expected_coverage)
 				return mmessage(ERROR_MSG, INTERNAL_ERROR,
 						"Coverage is too low.\n");
 			
@@ -1208,7 +1208,7 @@ int main(int argc, const char *argv[])
 	
 	/* store information for post-hoc tests of allelic coverage */
 	/* [BUG,KSD] no memory allocation checks */
-	size_t *haplotype_posns[N_FILES];    /* positions of het calls */
+	size_t *haplotype_posns[N_FILES];	/* positions of het calls */
 	haplotype_posns[0] = calloc(region_len, sizeof *haplotype_posns[0]);
 	haplotype_posns[1] = calloc(region_len, sizeof *haplotype_posns[1]);
 
@@ -1229,12 +1229,12 @@ int main(int argc, const char *argv[])
 	
 	debug_level = DEBUG_I;
 	match_pair(rf_info, my_refs[0]);
-    fprintf(stderr, "Start genotyping\n");
-    FILE *final_out;
-    if (opt.output_file) {
-        final_out = fopen(opt.output_file, "w");
-        fprintf(final_out, "ChromA  ChromB    PositionA    PositionB    Genotype_call    Call_A genome    Call_Bgenome    Major allele    Minor allele    PP(0,0)    PP(0,1)    PP(0,2)    PP(1,0)    PP(1,1)    PP(1,2)    PP(2,0)    PP(2,1)    PP(2,2)    PA(0)    PA(1)    PA(2)    PB(0)    PB(1)  PB(2)    CovA    CovB\n");
-    }
+	fprintf(stderr, "Start genotyping\n");
+	FILE *final_out;
+	if (opt.output_file) {
+		final_out = fopen(opt.output_file, "w");
+		fprintf(final_out, "ChromA  ChromB	PositionA	PositionB	Genotype_call	Call_A genome	Call_Bgenome	Major allele	Minor allele	PP(0,0)	PP(0,1)	PP(0,2)	PP(1,0)	PP(1,1)	PP(1,2)	PP(2,0)	PP(2,1)	PP(2,2)	PA(0)	PA(1)	PA(2)	PB(0)	PB(1)  PB(2)	CovA	CovB\n");
+	}
 	//the reference index of A AND B should be adjusted according to the cigar string, this only genotype on the site that are not -/A or A/-
 	/* finally: march along reference positions and genotype */
 	for (size_t posA = start_pos[0]; posA < end_pos[0]; ++posA) {
@@ -1287,7 +1287,7 @@ int main(int argc, const char *argv[])
 				
 				/* reference consumed */
 				if (se->cig->ashes[j].type == CIGAR_DELETION
-				    || se->cig->ashes[j].type == CIGAR_SKIP) {
+					|| se->cig->ashes[j].type == CIGAR_SKIP) {
 					
 					/* read deletes or skips desired site */
 					if (rf_idx + se->cig->ashes[j].len > target_a)
@@ -1362,7 +1362,7 @@ int main(int argc, const char *argv[])
 					
 					/* reference consumed */
 					if (se->cig->ashes[j].type == CIGAR_DELETION
-					    || se->cig->ashes[j].type == CIGAR_SKIP) {
+						|| se->cig->ashes[j].type == CIGAR_SKIP) {
 						
 						/* read deletes or skips desired site */
 						if (rf_idx + se->cig->ashes[j].len > target_b)
@@ -1416,7 +1416,7 @@ int main(int argc, const char *argv[])
 				for (unsigned int j = se->cig->n_ashes; j-- > 0; ) {
 					/* reference consumed */
 					if (se->cig->ashes[j].type == CIGAR_DELETION
-					    || se->cig->ashes[j].type == CIGAR_SKIP) {
+						|| se->cig->ashes[j].type == CIGAR_SKIP) {
 						
 						/* read deletes or skips desired site */
 						if (rf_idx - se->cig->ashes[j].len < target_b)
@@ -1554,7 +1554,7 @@ int main(int argc, const char *argv[])
 		}
 		
 //		fprintf(stderr, "referenceA: %c\n",iupac_to_char[ref_allele[0]]);
-//        fprintf(stderr, "referenceB: %c\n",iupac_to_char[ref_allele[1]]);
+//		fprintf(stderr, "referenceB: %c\n",iupac_to_char[ref_allele[1]]);
 //				double sumA = 0, sumB = 0;
 		
 		//
@@ -1593,7 +1593,7 @@ int main(int argc, const char *argv[])
 		
 		/* check for possible 3rd allele: we do not handle this yet */
 		if (num_nuc3 > opt.biallelic_screen
-		    * min_expected_coverage / 2) {
+			* min_expected_coverage / 2) {
 			debug_msg(debug_level > QUIET, debug_level, "Evidence "
 				  "of third nucleotide, will not genotype this"
 				  "site (%c=%zu, %c=%zu, %c=%zu).  To change the "
@@ -1619,7 +1619,7 @@ int main(int argc, const char *argv[])
 					one_alt = 1;
 				}
 				if (!no_alt_allele && nuc2 != nuc1
-				    && xy_to_iupac[nuc2] != ref_allele[i]) {
+					&& xy_to_iupac[nuc2] != ref_allele[i]) {
 					if (one_alt)
 						fputc(',', vcf_fp[i]);
 					fprintf(vcf_fp[i], "%c",
@@ -1632,7 +1632,7 @@ int main(int argc, const char *argv[])
 			}
 			continue;
 		}
-        
+		
 		fprintf(stderr, "Observed nucleotides (%zu): ", n_cover);
 		for (unsigned int i = 0; i < n_cover; ++i)
 			fprintf(stderr, "%c", xy_to_char[obs_nuc[i]]);
@@ -1675,9 +1675,9 @@ int main(int argc, const char *argv[])
 											 : xy_to_iupac[nuc1] | xy_to_iupac[nuc2],
 											 obs_nuc[n_cover], IUPAC_ENCODING, XY_ENCODING, obs_q[n_cover], 1, (void *)&mls);
 							/* log likelihood of B alignment */
-                            xy_t tmp = obs_nuc[n_cover];
-                            if (rf_info->info[my_refs[1]].strand_B) //RC if B is reversed
-                                tmp = xy_to_rc[obs_nuc[n_cover]];
+							xy_t tmp = obs_nuc[n_cover];
+							if (rf_info->info[my_refs[1]].strand_B) //RC if B is reversed
+								tmp = xy_to_rc[obs_nuc[n_cover]];
 							tmp2 = ll[1][n_read]
 							- sub_prob_given_q_with_encoding(
 											 ref_base[1],			/* homozygous ref base */
@@ -1766,10 +1766,10 @@ int main(int argc, const char *argv[])
 									/* assume source is A genome */
 									if (genome_src[n_cover] == 'A') {
 										lprob[g1p*3 + g2p] += sub_prob_given_q_with_encoding(
-																     !g1p ? xy_to_iupac[nuc1]			/* A genome is nuc1nuc1 */
-																     : g1p == 2 ? xy_to_iupac[nuc2]		/* A genome is nuc2nuc2 */
-																     : xy_to_iupac[nuc1] | xy_to_iupac[nuc2],	/* A genome is nuc1nuc2 */
-																     obs_nuc[n_cover], IUPAC_ENCODING, XY_ENCODING, obs_q[n_cover], 1, (void *)&mls);
+																	 !g1p ? xy_to_iupac[nuc1]			/* A genome is nuc1nuc1 */
+																	 : g1p == 2 ? xy_to_iupac[nuc2]		/* A genome is nuc2nuc2 */
+																	 : xy_to_iupac[nuc1] | xy_to_iupac[nuc2],	/* A genome is nuc1nuc2 */
+																	 obs_nuc[n_cover], IUPAC_ENCODING, XY_ENCODING, obs_q[n_cover], 1, (void *)&mls);
 										/*
 										 if (posA == dbg_site)
 										 fprintf(stderr, " %e", sub_prob_given_q_with_encoding(
@@ -1783,10 +1783,10 @@ int main(int argc, const char *argv[])
 										/* assume source is B genome */
 									} else {
 										lprob[g1p*3 + g2p] += sub_prob_given_q_with_encoding(
-																     !g2p ? xy_to_iupac[nuc1]			/* B genome is nuc1nuc1 */
-																     : g2p == 2 ? xy_to_iupac[nuc2]		/* B genome is nuc2nuc2 */
-																     : xy_to_iupac[nuc1] | xy_to_iupac[nuc2],	/* B genome is nuc1nuc2 */
-																     obs_nuc[n_cover], IUPAC_ENCODING, XY_ENCODING, obs_q[n_cover], 1, (void *)&mls);
+																	 !g2p ? xy_to_iupac[nuc1]			/* B genome is nuc1nuc1 */
+																	 : g2p == 2 ? xy_to_iupac[nuc2]		/* B genome is nuc2nuc2 */
+																	 : xy_to_iupac[nuc1] | xy_to_iupac[nuc2],	/* B genome is nuc1nuc2 */
+																	 obs_nuc[n_cover], IUPAC_ENCODING, XY_ENCODING, obs_q[n_cover], 1, (void *)&mls);
 										/*
 										 if (posA == dbg_site)
 										 fprintf(stderr, " %e", sub_prob_given_q_with_encoding(
@@ -1842,10 +1842,10 @@ int main(int argc, const char *argv[])
 				g1_max ? xy_to_char[nuc2] : xy_to_char[nuc1],
 				g2_max < 2 ? xy_to_char[nuc1] : xy_to_char[nuc2],
 				g2_max ? xy_to_char[nuc2] : xy_to_char[nuc1], mprob);
-            if (final_out) {
-                fprintf(final_out, "%s  %s  %4zu    %4zu",
-                        opt.ref_names[0], opt.ref_names[1], target_a, target_b + 2);
-            }
+			if (final_out) {
+				fprintf(final_out, "%s  %s  %4zu	%4zu",
+						opt.ref_names[0], opt.ref_names[1], target_a, target_b + 2);
+			}
 		} else {
 			fprintf(stderr, "Genotype (%4zu, %4zu, %3zu, %3zu): %c%c/%c%c (%f) [",
 				target_a + 1, target_b + 1, target_a - start_pos[0], target_b - start_pos[1],
@@ -1853,44 +1853,44 @@ int main(int argc, const char *argv[])
 				g1_max ? xy_to_char[nuc2] : xy_to_char[nuc1],
 				g2_max < 2 ? xy_to_char[nuc1] : xy_to_char[nuc2],
 				g2_max ? xy_to_char[nuc2] : xy_to_char[nuc1], mprob);
-            if (final_out) {
-                fprintf(final_out, "%s  %s  %4zu    %4zu",
-                        opt.ref_names[0], opt.ref_names[1], target_a + 1, target_b + 1);
-            }
-        }
-        if (final_out) {
-            fprintf(final_out, "    %c%c/%c%c   %c%c    %c%c   %c   %c",
-                    g1_max < 2 ? xy_to_char[nuc1] : xy_to_char[nuc2],
-                    g1_max ? xy_to_char[nuc2] : xy_to_char[nuc1],
-                    g2_max < 2 ? xy_to_char[nuc1] : xy_to_char[nuc2],
-                    g2_max ? xy_to_char[nuc2] : xy_to_char[nuc1],
-                    g1_max < 2 ? xy_to_char[nuc1] : xy_to_char[nuc2],
-                    g1_max ? xy_to_char[nuc2] : xy_to_char[nuc1],
-                    g2_max < 2 ? xy_to_char[nuc1] : xy_to_char[nuc2],
-                    g2_max ? xy_to_char[nuc2] : xy_to_char[nuc1],
-                    nuc1, nuc2);
-        }
+			if (final_out) {
+				fprintf(final_out, "%s  %s  %4zu	%4zu",
+						opt.ref_names[0], opt.ref_names[1], target_a + 1, target_b + 1);
+			}
+		}
+		if (final_out) {
+			fprintf(final_out, "	%c%c/%c%c   %c%c	%c%c   %c   %c",
+					g1_max < 2 ? xy_to_char[nuc1] : xy_to_char[nuc2],
+					g1_max ? xy_to_char[nuc2] : xy_to_char[nuc1],
+					g2_max < 2 ? xy_to_char[nuc1] : xy_to_char[nuc2],
+					g2_max ? xy_to_char[nuc2] : xy_to_char[nuc1],
+					g1_max < 2 ? xy_to_char[nuc1] : xy_to_char[nuc2],
+					g1_max ? xy_to_char[nuc2] : xy_to_char[nuc1],
+					g2_max < 2 ? xy_to_char[nuc1] : xy_to_char[nuc2],
+					g2_max ? xy_to_char[nuc2] : xy_to_char[nuc1],
+					nuc1, nuc2);
+		}
 
 		for (int g1 = 0; g1 <= 2; ++g1)
 			for (int g2 = 0; g2 <= 2; ++g2) {
-                if (final_out)
-                    fprintf(final_out, "   %f", gprob[g1*3 + g2]);
-                fprintf(stderr, " %f", gprob[g1*3 + g2]);
+				if (final_out)
+					fprintf(final_out, "   %f", gprob[g1*3 + g2]);
+				fprintf(stderr, " %f", gprob[g1*3 + g2]);
 				if (g1 == 1)
 					prob_heterozygoteA += gprob[g1*3 + g2];
 				if (g2 == 1)
 					prob_heterozygoteB += gprob[g1*3 + g2];
 			}
-        if (final_out) {
-            fprintf(final_out, "   %f   %f   %f   %f   %f   %f    %f  %f\n",
-                    gprob[0] + gprob[1] + gprob[2],
-                    gprob[3] + gprob[4] + gprob[5],
-                    gprob[6] + gprob[7] + gprob[8],
-                    gprob[0] + gprob[3] + gprob[6],
-                    gprob[1] + gprob[4] + gprob[7],
-                    gprob[2] + gprob[5] + gprob[8],
-                    sumA, sumB);
-        }
+		if (final_out) {
+			fprintf(final_out, "   %f   %f   %f   %f   %f   %f	%f  %f\n",
+					gprob[0] + gprob[1] + gprob[2],
+					gprob[3] + gprob[4] + gprob[5],
+					gprob[6] + gprob[7] + gprob[8],
+					gprob[0] + gprob[3] + gprob[6],
+					gprob[1] + gprob[4] + gprob[7],
+					gprob[2] + gprob[5] + gprob[8],
+					sumA, sumB);
+		}
 		prob_heterozygote[0] = prob_heterozygoteA;
 		prob_heterozygote[1] = prob_heterozygoteB;
 		fprintf(stderr, "]%s\n", g1_max == 1 || g2_max == 1 ? "***"
@@ -1901,13 +1901,13 @@ int main(int argc, const char *argv[])
 //			haplotypeA[n_segregatingA++] = target_a;
 //		if (prob_heterozygoteB >= opt.min_genotype_post_prob)
 //			haplotypeB[n_segregatingB++] = target_b;
-        int g_max[N_FILES] = {g1_max, g2_max};
-        double ect_pvals[N_FILES] = {1, 1};
-        if (opt.equal_homolog_coverage_test
-            && (g_max[0] == 1 || g_max[1] == 1))
-                test_equal_homolog_coverage(mh, ll, ref_base,
-                    covers, obs_nuc, obs_q, obs_rpos, g_max,
-                    nuc1, nuc2, debug_level, ect_pvals);
+		int g_max[N_FILES] = {g1_max, g2_max};
+		double ect_pvals[N_FILES] = {1, 1};
+		if (opt.equal_homolog_coverage_test
+			&& (g_max[0] == 1 || g_max[1] == 1))
+				test_equal_homolog_coverage(mh, ll, ref_base,
+					covers, obs_nuc, obs_q, obs_rpos, g_max,
+					nuc1, nuc2, debug_level, ect_pvals);
 		/* write out results to vcf files */
 		
 		for (int i = 0; i < N_FILES; ++i) {
@@ -1953,8 +1953,8 @@ int main(int argc, const char *argv[])
 			} else {
 				fprintf(vcf_fp[i], "\t.\tPASS\t.\tGT:DP:GQ");
 			}
-            if (opt.equal_homolog_coverage_test && g_max[i] == 1)
-                fprintf(vcf_fp[i], ":ET");
+			if (opt.equal_homolog_coverage_test && g_max[i] == 1)
+				fprintf(vcf_fp[i], ":ET");
 			if (opt.vcf_opt->output_gl)
 				fprintf(vcf_fp[i], ":GL");
 			fputc('\t', vcf_fp[i]);
@@ -1990,13 +1990,13 @@ int main(int argc, const char *argv[])
 				(int) (ecoverage[i] + 0.5),
 				pe > 0 ? MIN(99, (int) (-10 * log10(pe))) : 99);
 			
-            if (opt.equal_homolog_coverage_test) {
-                if (g_max[i] == 1) {
-                    fprintf(vcf_fp[i], ":%.1f",
-                        fabs(log10(ect_pvals[i])));
-                }
-            }
-            
+			if (opt.equal_homolog_coverage_test) {
+				if (g_max[i] == 1) {
+					fprintf(vcf_fp[i], ":%.1f",
+						fabs(log10(ect_pvals[i])));
+				}
+			}
+			
 			if (!opt.vcf_opt->output_gl) {
 				fputc('\n', vcf_fp[i]);
 				continue;
@@ -2052,8 +2052,8 @@ int main(int argc, const char *argv[])
 			hapB_dom_nuc[n_segregatingB++] = modeB;
 		}
 	}
-    if (final_out)
-        fclose(final_out);
+	if (final_out)
+		fclose(final_out);
 /*
 fprintf(stderr, "Genotype A has %u segregating sites:", n_segregatingA);
 for (unsigned int, "\nGenotype B has %u segregating sites:", n_segregatingB);
@@ -2067,176 +2067,176 @@ for (unsigned int, "\nGenotype B has %u segregating sites:", n_segregatingB);
 
 	/* KSD,TODO Delete all this! */
 	if (opt.posthoc_coverage_test) {
-        
-        unsigned int buffer_size = 32, buffer_block = 32, n_buffer = 1;
-        unsigned int n_haplotype[2] = {0, 0};
-        uint64_t *haplotype_id[2] = {
+		
+		unsigned int buffer_size = 32, buffer_block = 32, n_buffer = 1;
+		unsigned int n_haplotype[2] = {0, 0};
+		uint64_t *haplotype_id[2] = {
 		malloc(buffer_size * sizeof *haplotype_id[0]),
 		malloc(buffer_size * sizeof *haplotype_id[1])};
-        unsigned int *haplotype_cnt[2] = {
+		unsigned int *haplotype_cnt[2] = {
 		calloc(buffer_size, sizeof *haplotype_cnt[0]),
 		calloc(buffer_size, sizeof *haplotype_cnt[1])};
-        /* [KSD, TODO] check allocations */
-        
-        /* count haplotype occurrences in both genomes */
-        n_read = 0;
-        for (merge_hash *me = mh; me != NULL; me = me->hh.next) {
-            if (me->exclude)
-                continue;
+		/* [KSD, TODO] check allocations */
+		
+		/* count haplotype occurrences in both genomes */
+		n_read = 0;
+		for (merge_hash *me = mh; me != NULL; me = me->hh.next) {
+			if (me->exclude)
+				continue;
 
-//            fprintf(stderr, "Processing read %zu", n_read);
-            /* find subgenomic assignment or continue if ambiguously aligned */
-            unsigned int sgenome = 0;
-            for (unsigned int j = 1; j < N_FILES; ++j)
-                if (pp[j][n_read] >= opt.min_alignment_post_prob) {
-                    sgenome = j;
-                    break;
-                }
-            if (!sgenome && pp[sgenome][n_read]
-                        < opt.min_alignment_post_prob) {
-                ++n_read;
-                continue;
-            }
-//            fprintf(stderr, " assigned to subgenome %s.", sgenome?"B":"A");
+//			fprintf(stderr, "Processing read %zu", n_read);
+			/* find subgenomic assignment or continue if ambiguously aligned */
+			unsigned int sgenome = 0;
+			for (unsigned int j = 1; j < N_FILES; ++j)
+				if (pp[j][n_read] >= opt.min_alignment_post_prob) {
+					sgenome = j;
+					break;
+				}
+			if (!sgenome && pp[sgenome][n_read]
+						< opt.min_alignment_post_prob) {
+				++n_read;
+				continue;
+			}
+//			fprintf(stderr, " assigned to subgenome %s.", sgenome?"B":"A");
 
-            /* get haplotype: packed 2-bit nucleotides */
-            sam_entry *se = &sds[sgenome]->se[me->indices[sgenome][0]];
-            uint64_t id = get_haplotype_id(se,
-                sgenome ? haplotype_posns[1] : haplotype_posns[0],
-                sgenome ? n_segregatingB : n_segregatingA);
-            //fprintf(stderr, "id = %lu\n", id);
+			/* get haplotype: packed 2-bit nucleotides */
+			sam_entry *se = &sds[sgenome]->se[me->indices[sgenome][0]];
+			uint64_t id = get_haplotype_id(se,
+				sgenome ? haplotype_posns[1] : haplotype_posns[0],
+				sgenome ? n_segregatingB : n_segregatingA);
+			//fprintf(stderr, "id = %lu\n", id);
 
-            /* increase count for this haplotype or ... */
-            unsigned int exists = 0, hpos = 0;
-            for (unsigned int j = 0; j < n_haplotype[sgenome]; ++j)
-                if (haplotype_id[sgenome][j] == id) {
-                    ++haplotype_cnt[sgenome][j];
-                    hpos = j;
-                    exists = 1;
-                    break;
-                }
-            /* add new haplotype */
-            if (!exists) {
-                if (n_haplotype[sgenome] == buffer_size) {
-                    buffer_size = ++n_buffer * buffer_block;
-                    uint64_t *new_id = realloc(haplotype_id[0], buffer_size * sizeof *haplotype_id[0]);
-                    if (!new_id)
-                        return mmessage(ERROR_MSG, INTERNAL_ERROR, "Ran out of memory!\n");
-                    haplotype_id[0] = new_id;
-                    new_id = realloc(haplotype_id[1], buffer_size * sizeof *haplotype_id[1]);
-                    if (!new_id)
-                        return mmessage(ERROR_MSG, INTERNAL_ERROR, "Ran out of memory!\n");
-                    haplotype_id[1] = new_id;
-                    unsigned int *new_cnt = realloc(haplotype_cnt[0], buffer_size * sizeof *haplotype_cnt[0]);
-                    if (!new_cnt)
-                        return mmessage(ERROR_MSG, INTERNAL_ERROR, "Ran out of memory!\n");
-                    memset(new_cnt + (n_buffer - 1) * buffer_block, 0, buffer_block * sizeof *new_cnt);
-                    haplotype_cnt[0] = new_cnt;
-                    new_cnt = realloc(haplotype_cnt[1], buffer_size * sizeof *haplotype_cnt[1]);
-                    if (!new_cnt)
-                        return mmessage(ERROR_MSG, INTERNAL_ERROR, "Ran out of memory!\n");
-                    memset(new_cnt + (n_buffer - 1) * buffer_block, 0, buffer_block * sizeof *new_cnt);
-                    haplotype_cnt[1] = new_cnt;
-                }
-                hpos = n_haplotype[sgenome]++;
-                haplotype_id[sgenome][hpos] = id;
-                haplotype_cnt[sgenome][hpos] = 1;
-            }
-//            fprintf(stderr, "Found haplotype %lu (%u)\n", id, haplotype_cnt[sgenome][hpos]);
-            ++n_read;
-        }
+			/* increase count for this haplotype or ... */
+			unsigned int exists = 0, hpos = 0;
+			for (unsigned int j = 0; j < n_haplotype[sgenome]; ++j)
+				if (haplotype_id[sgenome][j] == id) {
+					++haplotype_cnt[sgenome][j];
+					hpos = j;
+					exists = 1;
+					break;
+				}
+			/* add new haplotype */
+			if (!exists) {
+				if (n_haplotype[sgenome] == buffer_size) {
+					buffer_size = ++n_buffer * buffer_block;
+					uint64_t *new_id = realloc(haplotype_id[0], buffer_size * sizeof *haplotype_id[0]);
+					if (!new_id)
+						return mmessage(ERROR_MSG, INTERNAL_ERROR, "Ran out of memory!\n");
+					haplotype_id[0] = new_id;
+					new_id = realloc(haplotype_id[1], buffer_size * sizeof *haplotype_id[1]);
+					if (!new_id)
+						return mmessage(ERROR_MSG, INTERNAL_ERROR, "Ran out of memory!\n");
+					haplotype_id[1] = new_id;
+					unsigned int *new_cnt = realloc(haplotype_cnt[0], buffer_size * sizeof *haplotype_cnt[0]);
+					if (!new_cnt)
+						return mmessage(ERROR_MSG, INTERNAL_ERROR, "Ran out of memory!\n");
+					memset(new_cnt + (n_buffer - 1) * buffer_block, 0, buffer_block * sizeof *new_cnt);
+					haplotype_cnt[0] = new_cnt;
+					new_cnt = realloc(haplotype_cnt[1], buffer_size * sizeof *haplotype_cnt[1]);
+					if (!new_cnt)
+						return mmessage(ERROR_MSG, INTERNAL_ERROR, "Ran out of memory!\n");
+					memset(new_cnt + (n_buffer - 1) * buffer_block, 0, buffer_block * sizeof *new_cnt);
+					haplotype_cnt[1] = new_cnt;
+				}
+				hpos = n_haplotype[sgenome]++;
+				haplotype_id[sgenome][hpos] = id;
+				haplotype_cnt[sgenome][hpos] = 1;
+			}
+//			fprintf(stderr, "Found haplotype %lu (%u)\n", id, haplotype_cnt[sgenome][hpos]);
+			++n_read;
+		}
 
-        /* for each subgenome, test hypothesis of equal coverage of two
-         * most common haplotypes, assuming there are two haplotypes
-         */
-        
-        int *fail_test[2] = {NULL, NULL};
-        for (unsigned int i = 0; i < 2; ++i) {
-            unsigned int max = 0, smax = 0, total = 0;
-            unsigned int idx = 0;
+		/* for each subgenome, test hypothesis of equal coverage of two
+		 * most common haplotypes, assuming there are two haplotypes
+		 */
+		
+		int *fail_test[2] = {NULL, NULL};
+		for (unsigned int i = 0; i < 2; ++i) {
+			unsigned int max = 0, smax = 0, total = 0;
+			unsigned int idx = 0;
 
-            if (i ? n_segregatingB : n_segregatingA)
-                fail_test[i] = calloc(i ? n_segregatingB
-                    : n_segregatingA, sizeof *fail_test[i]);
+			if (i ? n_segregatingB : n_segregatingA)
+				fail_test[i] = calloc(i ? n_segregatingB
+					: n_segregatingA, sizeof *fail_test[i]);
 
-            for (unsigned int j = 0; j < n_haplotype[i]; ++j) {
-                if (haplotype_cnt[i][j] > max) {
-                    smax = max;
-                    max = haplotype_cnt[i][j];
-                    idx = j;
-                } else if (haplotype_cnt[i][j] > smax) {
-                    smax = haplotype_cnt[i][j];
-                }
-                total += haplotype_cnt[i][j];
-            }
-            uint64_t id = haplotype_id[i][idx];
-            unsigned int n = max + smax;
-            /* Wilson score interval with continuity correction */
-            double phat = (double) max / n;
-            double z = 1.959963984540054;
-            double z2 = z*z;
-            double sq = sqrt(z2 - 1./n + 4*n*phat*(1-phat)
-                                + 4*phat - 2);
-            double den = 2*(n+z2);
-            double wminus = (2*n*phat + z2 - (z*sq + 1))/den;
-            double wplus = (2*n*phat + z2 + (z*sq + 1))/den;
-            if (wminus < 0) wminus = 0;
-            if (wplus > 1) wplus = 1;
-            unsigned int covers_p5 = 0;
-            if (wminus <= 0.5 && wplus >= 0.5)
-                covers_p5 = 1;
+			for (unsigned int j = 0; j < n_haplotype[i]; ++j) {
+				if (haplotype_cnt[i][j] > max) {
+					smax = max;
+					max = haplotype_cnt[i][j];
+					idx = j;
+				} else if (haplotype_cnt[i][j] > smax) {
+					smax = haplotype_cnt[i][j];
+				}
+				total += haplotype_cnt[i][j];
+			}
+			uint64_t id = haplotype_id[i][idx];
+			unsigned int n = max + smax;
+			/* Wilson score interval with continuity correction */
+			double phat = (double) max / n;
+			double z = 1.959963984540054;
+			double z2 = z*z;
+			double sq = sqrt(z2 - 1./n + 4*n*phat*(1-phat)
+								+ 4*phat - 2);
+			double den = 2*(n+z2);
+			double wminus = (2*n*phat + z2 - (z*sq + 1))/den;
+			double wplus = (2*n*phat + z2 + (z*sq + 1))/den;
+			if (wminus < 0) wminus = 0;
+			if (wplus > 1) wplus = 1;
+			unsigned int covers_p5 = 0;
+			if (wminus <= 0.5 && wplus >= 0.5)
+				covers_p5 = 1;
 
-            double x2 = 2*n*(((double) max / n - 0.5) * ((double) max / n - 0.5)
-                 + ((double) smax / n - 0.5) * ((double) smax / n - 0.5));
-            double pval = pchisq(x2, 1, 0, 0);
-            if (i ? n_segregatingB : n_segregatingA) {
+			double x2 = 2*n*(((double) max / n - 0.5) * ((double) max / n - 0.5)
+				 + ((double) smax / n - 0.5) * ((double) smax / n - 0.5));
+			double pval = pchisq(x2, 1, 0, 0);
+			if (i ? n_segregatingB : n_segregatingA) {
 
-                debug_msg(1, 1, "Subgenome %s haplotype ",
-                                i?"B":"A");
-                for (unsigned int j = 0; j < (i ? n_segregatingB
-                            : n_segregatingA); ++j)
-                    debug_msg_cont(1, 1, "%c",
-                        xy_to_char[3U & (id >> (2*j))]);
-                debug_msg_cont(1, 1, " has coverage of %u/%u "
-                    " (%u : %u of total %u) high-confidence"
-                    " reads (X2 = %f; p-value %e)\n",
-                    haplotype_cnt[i][idx],
-                    n, max, smax, total, x2, pval);
-                debug_msg(1, 1, "Subgenome %s coverage "
-                    "proportion confidence interval: %f "
-                    "%f (%u)\n", i?"B":"A", wminus, wplus,
-                                covers_p5);
+				debug_msg(1, 1, "Subgenome %s haplotype ",
+								i?"B":"A");
+				for (unsigned int j = 0; j < (i ? n_segregatingB
+							: n_segregatingA); ++j)
+					debug_msg_cont(1, 1, "%c",
+						xy_to_char[3U & (id >> (2*j))]);
+				debug_msg_cont(1, 1, " has coverage of %u/%u "
+					" (%u : %u of total %u) high-confidence"
+					" reads (X2 = %f; p-value %e)\n",
+					haplotype_cnt[i][idx],
+					n, max, smax, total, x2, pval);
+				debug_msg(1, 1, "Subgenome %s coverage "
+					"proportion confidence interval: %f "
+					"%f (%u)\n", i?"B":"A", wminus, wplus,
+								covers_p5);
 
-                debug_msg(1, 1, "Subgenome %s modal alleles ",
-                                i?"B":"A");
-                for (unsigned int j = 0; j < (i ? n_segregatingB
-                            : n_segregatingA); ++j)
-                    debug_msg_cont(1, 1, "%c", xy_to_char[
-                        i ? hapB_dom_nuc[j]
-                            : hapA_dom_nuc[j]]);
-                debug_msg_cont(1, 1, " coverage:");
-                for (unsigned int j = 0; j < (i ? n_segregatingB
-                        : n_segregatingA); ++j) {
-                    x2 = 2 * (i ? hapB_covg[j] : hapA_covg[j])
-                        * ( ((i ? hapB_prop[j] : hapA_prop[j]) - 0.5) * ((i ? hapB_prop[j] : hapA_prop[j]) - 0.5)
-                        + ( -(i ? hapB_prop[j] : hapA_prop[j]) + 0.5) * ( -(i ? hapB_prop[j] : hapA_prop[j]) + 0.5));
-                    pval = pchisq(x2, 1, 0, 0);
-                    if (pval < 0.05)
-                        fail_test[i][j] = 1;
-                    debug_msg_cont(1, 1, " %f of %f (%e)",
-                        i ?  hapB_prop[j] : hapA_prop[j],
-                        i ? hapB_covg[j] : hapA_covg[j],
-                                    pval);
-                }
-                debug_msg_cont(1, 1, "\n");
-            }
-        }
-        update_vcf(&opt, fail_test, haplotype_posns);
+				debug_msg(1, 1, "Subgenome %s modal alleles ",
+								i?"B":"A");
+				for (unsigned int j = 0; j < (i ? n_segregatingB
+							: n_segregatingA); ++j)
+					debug_msg_cont(1, 1, "%c", xy_to_char[
+						i ? hapB_dom_nuc[j]
+							: hapA_dom_nuc[j]]);
+				debug_msg_cont(1, 1, " coverage:");
+				for (unsigned int j = 0; j < (i ? n_segregatingB
+						: n_segregatingA); ++j) {
+					x2 = 2 * (i ? hapB_covg[j] : hapA_covg[j])
+						* ( ((i ? hapB_prop[j] : hapA_prop[j]) - 0.5) * ((i ? hapB_prop[j] : hapA_prop[j]) - 0.5)
+						+ ( -(i ? hapB_prop[j] : hapA_prop[j]) + 0.5) * ( -(i ? hapB_prop[j] : hapA_prop[j]) + 0.5));
+					pval = pchisq(x2, 1, 0, 0);
+					if (pval < 0.05)
+						fail_test[i][j] = 1;
+					debug_msg_cont(1, 1, " %f of %f (%e)",
+						i ?  hapB_prop[j] : hapA_prop[j],
+						i ? hapB_covg[j] : hapA_covg[j],
+									pval);
+				}
+				debug_msg_cont(1, 1, "\n");
+			}
+		}
+		update_vcf(&opt, fail_test, haplotype_posns);
 
-        if (fail_test[0])
-            free(fail_test[0]);
-        if (fail_test[1])
-            free(fail_test[1]);
+		if (fail_test[0])
+			free(fail_test[0]);
+		if (fail_test[1])
+			free(fail_test[1]);
 		free(haplotype_id[0]);
 		free(haplotype_id[1]);
 		free(haplotype_cnt[0]);
@@ -2400,14 +2400,14 @@ double ll_align(sam_entry *se, unsigned int rd_id, unsigned char *ref,
 
 	for (unsigned int i = 0; i < se->cig->n_ashes; ++i)
 		if (se->cig->ashes[i].type == CIGAR_DELETION
-		    || se->cig->ashes[i].type == CIGAR_INSERTION
-		    || se->cig->ashes[i].type == CIGAR_MATCH
-		    || se->cig->ashes[i].type == CIGAR_MMATCH
-		    || se->cig->ashes[i].type == CIGAR_MISMATCH)
+			|| se->cig->ashes[i].type == CIGAR_INSERTION
+			|| se->cig->ashes[i].type == CIGAR_MATCH
+			|| se->cig->ashes[i].type == CIGAR_MMATCH
+			|| se->cig->ashes[i].type == CIGAR_MISMATCH)
 			align_len += se->cig->ashes[i].len;
 
 	if (reverse_complement && (fxn_debug >= DEBUG_II || show)
-	    && !display_qual && !display_after)
+		&& !display_qual && !display_after)
 		align_display = malloc(align_len * sizeof *align_display);
 	if (display_after)
 		align_display = malloc(align_len * sizeof *align_display);
@@ -2432,7 +2432,7 @@ double ll_align(sam_entry *se, unsigned int rd_id, unsigned char *ref,
 			if (fxn_debug >= DEBUG_II || show)
 				for (size_t j = 0; j < se->cig->ashes[i].len; ++j) {
 					if (!reverse_complement && !display_after
-					    && (fxn_debug || show))
+						&& (fxn_debug || show))
 						fprintf(stderr, "%c",
 							iupac_to_char[ref[rf_index + j]]);
 					else if (!display_qual && (fxn_debug || show))
@@ -2489,21 +2489,21 @@ double ll_align(sam_entry *se, unsigned int rd_id, unsigned char *ref,
 		for (size_t j = 0; j < se->cig->ashes[i].len; ++j) {
 			mls->pos = rd_index + j;
 			double llt = sub_prob_given_q_with_encoding(ref[rf_index + j],
-								    get_nuc(se->read, XY_ENCODING, rd_index + j),
-								    IUPAC_ENCODING, XY_ENCODING,
-								    get_qual(se->qual, rd_index + j), 1, (void *) mls);
+									get_nuc(se->read, XY_ENCODING, rd_index + j),
+									IUPAC_ENCODING, XY_ENCODING,
+									get_qual(se->qual, rd_index + j), 1, (void *) mls);
 			ll += llt;
 			debug_msg(fxn_debug >= DEBUG_III, fxn_debug, "%u (%u): %c -> %c (%c): %f (%f)\n", rf_index + j, j, iupac_to_char[ref[rf_index + j]], xy_to_char[get_nuc(se->read, XY_ENCODING, rd_index + j)], (char)get_qual(se->qual, rd_index + j) + MIN_ASCII_QUALITY_SCORE, llt, ll);
 			if (!reverse_complement && !display_after
-			    && (fxn_debug || show))
+				&& (fxn_debug || show))
 				debug_msg_cont(fxn_debug >= DEBUG_I || show, fxn_debug,
-					       "%c", iupac_to_char[ref[rf_index + j]]);
+						   "%c", iupac_to_char[ref[rf_index + j]]);
 			else if (!display_qual && (fxn_debug || show))
 				align_display[align_index++] = ref[rf_index + j];
 			if (display_qual) {
 				align_display[align_index] = ref[rf_index + j];
 				qual_display[align_index++] = (char) get_qual(
-									      se->qual, rd_index + j)
+										  se->qual, rd_index + j)
 				+ MIN_ASCII_QUALITY_SCORE;
 			}
 			if (!reverse_complement && !display_after && guide_posts && !(++out % 10))
@@ -2516,7 +2516,7 @@ double ll_align(sam_entry *se, unsigned int rd_id, unsigned char *ref,
 	if ((fxn_debug >= DEBUG_II || show) && reverse_complement) {
 		for (size_t j = align_len; j > 0; --j) {
 			fputc(!align_display[j - 1] ? '-' :
-			      iupac_to_char[iupac_to_rc[
+				  iupac_to_char[iupac_to_rc[
 							align_display[j - 1]]], stderr);
 			if (!((align_len - j + 1) % 10) && guide_posts)
 				fputc('|', stderr);
@@ -2526,7 +2526,7 @@ double ll_align(sam_entry *se, unsigned int rd_id, unsigned char *ref,
 			debug_msg(fxn_debug >= DEBUG_II || show, fxn_debug, "Qual: ");
 			for (size_t j = align_len; j > 0; --j) {
 				fputc(!qual_display[j - 1]
-				      ? ' ' : qual_display[j - 1], stderr);
+					  ? ' ' : qual_display[j - 1], stderr);
 				if (!((align_len - j + 1) % 10) && guide_posts)
 					fputc('|', stderr);
 			}
@@ -2536,7 +2536,7 @@ double ll_align(sam_entry *se, unsigned int rd_id, unsigned char *ref,
 	if (display_after && !reverse_complement) {
 		for (size_t j = 0; j < align_len; ++j) {
 			fputc(!align_display[j] ? '-' :
-			      iupac_to_char[align_display[j]], stderr);
+				  iupac_to_char[align_display[j]], stderr);
 			if (!((j + 1) % 10) && guide_posts)
 				fputc('|', stderr);
 		}
@@ -2565,7 +2565,7 @@ double ll_align(sam_entry *se, unsigned int rd_id, unsigned char *ref,
 				//				rd_index += se->cig->ashes[i].len;
 			} else if (se->cig->ashes[i].type == CIGAR_DELETION) {
 				for (size_t j = 0; j < se->cig->ashes[i].len;
-				     ++j) {
+					 ++j) {
 					if (!reverse_complement && !display_after)
 						fputc('-', stderr);
 					else
@@ -2616,13 +2616,13 @@ if (rf_index + se->cig->ashes[i].len > rf_pos2) {
 }
 */
 				for (size_t j = 0; j < se->cig->ashes[i].len;
-				     ++j) {
+					 ++j) {
 					data_t nuc = get_nuc(se->read,
-							     XY_ENCODING, rd_index + j);
+								 XY_ENCODING, rd_index + j);
 //if (flag1 || flag2)
 //if (show) fprintf(stderr, " %zu=%c", rd_index + j, xy_to_char[nuc]);
 					if (!reverse_complement && !display_after
-					    && (fxn_debug || show))
+						&& (fxn_debug || show))
 						fprintf(stderr, "%c", display_dot && iupac_to_xy[
 												 ref[rf_index + j]] == nuc
 							? '.' : xy_to_char[nuc]);
@@ -2814,7 +2814,7 @@ int default_options(options *opt)
 		opt->ref_names[i] = NULL;
 		opt->vcf_files[i] = NULL;
 	}
-    opt->output_file = NULL;
+	opt->output_file = NULL;
 	opt->sample_name = NULL;
 	opt->extracted_rf = NULL;
 	opt->sam_file = NULL;
@@ -2826,7 +2826,7 @@ int default_options(options *opt)
 	opt->write_fastq_and_quit = 0;
 	opt->min_expected_coverage = 5.;
 	opt->posthoc_coverage_test = 0;
-    opt->equal_homolog_coverage_test = 0;
+	opt->equal_homolog_coverage_test = 0;
 	opt->min_alignment_post_prob = 0.99;
 	opt->min_genotype_post_prob = 0.99;
 	make_default_vcf_options(&opt->vcf_opt);
@@ -2880,9 +2880,9 @@ int parse_options_roshan(options *opt, int argc, const char **argv)
 			if (!strncmp(&argv[i][j], "bam", 3)) {
 				if (i + N_FILES >= argc) {
 					err = mmessage(ERROR_MSG,
-						       INVALID_CMD_ARGUMENT, "Too few "
-						       "arguments to --bam_files "
-						       "command-line option.\n");
+							   INVALID_CMD_ARGUMENT, "Too few "
+							   "arguments to --bam_files "
+							   "command-line option.\n");
 					goto CMDLINE_ERROR;
 				}
 				opt->use_bam = 1;
@@ -2895,7 +2895,7 @@ int parse_options_roshan(options *opt, int argc, const char **argv)
 				fprintf(stderr, "\n");
 			} else if (!strncmp(&argv[i][j], "bia", 3)) {
 				opt->biallelic_screen = read_cmdline_double(
-									    argc, argv, ++i, opt);
+										argc, argv, ++i, opt);
 				mmessage(INFO_MSG, NO_ERROR, "Dropping sites "
 					 "with third allele above %f of minimum "
 					 "estimated subgenomic coverage.\n",
@@ -2927,9 +2927,9 @@ int parse_options_roshan(options *opt, int argc, const char **argv)
 				opt->error_file = fopen(argv[++i], "w");
 				if (!opt->error_file) {
 					err = mmessage(ERROR_MSG,
-						       INVALID_CMD_ARGUMENT,
-						       "Could not open file '%s'\n",
-						       argv[i]);
+							   INVALID_CMD_ARGUMENT,
+							   "Could not open file '%s'\n",
+							   argv[i]);
 					goto CMDLINE_ERROR;
 				}
 				mmessage(INFO_MSG, NO_ERROR, "Error data file: "
@@ -2938,9 +2938,9 @@ int parse_options_roshan(options *opt, int argc, const char **argv)
 				opt->param_file = argv[++i];
 				if (access(opt->param_file, F_OK) == -1) {
 					err = mmessage(ERROR_MSG,
-						       INVALID_CMD_ARGUMENT,
-						       "Could not open file '%s'.\n",
-						       opt->param_file);
+							   INVALID_CMD_ARGUMENT,
+							   "Could not open file '%s'.\n",
+							   opt->param_file);
 					goto CMDLINE_ERROR;
 				}
 				mmessage(INFO_MSG, NO_ERROR, "Error "
@@ -2951,8 +2951,8 @@ int parse_options_roshan(options *opt, int argc, const char **argv)
 		case 'f':
 			if (i + N_FILES >= argc) {
 				err = mmessage(ERROR_MSG, INVALID_CMD_ARGUMENT,
-					       "Too few arguments to --fsa_files "
-					       "command-line option.\n");
+						   "Too few arguments to --fsa_files "
+						   "command-line option.\n");
 				goto CMDLINE_ERROR;
 			}
 			mmessage(INFO_MSG, NO_ERROR, "Fasta files:");
@@ -3028,8 +3028,8 @@ int parse_options_roshan(options *opt, int argc, const char **argv)
 		case 'r':
 			if (i + N_FILES >= argc) {
 				err = mmessage(ERROR_MSG, INVALID_CMD_ARGUMENT,
-					       "Too few arguments to --ref_names "
-					       "command-line option.\n");
+						   "Too few arguments to --ref_names "
+						   "command-line option.\n");
 				goto CMDLINE_ERROR;
 			}
 			mmessage(INFO_MSG, NO_ERROR, "Reference names:");
@@ -3059,9 +3059,9 @@ int parse_options_roshan(options *opt, int argc, const char **argv)
 			} else if (!strncmp(&argv[i][j], "sam", 3)) {
 				if (i + N_FILES >= argc) {
 					err = mmessage(ERROR_MSG,
-						       INVALID_CMD_ARGUMENT, "Too few "
-						       "arguments to --sam_files "
-						       "command-line option.\n");
+							   INVALID_CMD_ARGUMENT, "Too few "
+							   "arguments to --sam_files "
+							   "command-line option.\n");
 					goto CMDLINE_ERROR;
 				}
 				mmessage(INFO_MSG, NO_ERROR, "Sam files:");
@@ -3088,12 +3088,12 @@ int parse_options_roshan(options *opt, int argc, const char **argv)
 			if (!opt->vcf_opt && (err = make_default_vcf_options(&opt->vcf_opt)))
 				goto CMDLINE_ERROR;
 			break;
-        case 'o':
-            opt->output_file = argv[++i];
-            mmessage(INFO_MSG, NO_ERROR,
-                 "Final output file: %s\n",
-                 opt->output_file);
-            break;
+		case 'o':
+			opt->output_file = argv[++i];
+			mmessage(INFO_MSG, NO_ERROR,
+				 "Final output file: %s\n",
+				 opt->output_file);
+			break;
 		case 'w':
 			opt->write_fastq_and_quit = 1;
 			mmessage(INFO_MSG, NO_ERROR, "Will write selected "
@@ -3101,14 +3101,14 @@ int parse_options_roshan(options *opt, int argc, const char **argv)
 			break;
 
 		case 'p':
-            if (!strncmp(&argv[i][j], "po", 2)) {
-                opt->equal_homolog_coverage_test = 1;
-                mmessage(INFO_MSG, NO_ERROR, "Will run "
-                        "equal coverage test.\n");
-                break;
-            }
-            if (i + 1 >= argc)
-                goto CMDLINE_ERROR;
+			if (!strncmp(&argv[i][j], "po", 2)) {
+				opt->equal_homolog_coverage_test = 1;
+				mmessage(INFO_MSG, NO_ERROR, "Will run "
+						"equal coverage test.\n");
+				break;
+			}
+			if (i + 1 >= argc)
+				goto CMDLINE_ERROR;
 			opt->proptest_screen = read_int(argc, argv, ++i, opt);
 			mmessage(INFO_MSG, NO_ERROR, "Dropping reads assigned "
 				"to all but %d most-abundant haplotypes\n",
@@ -3127,8 +3127,8 @@ int parse_options_roshan(options *opt, int argc, const char **argv)
 			goto CMDLINE_ERROR;
 		}
 	}
-    opt->vcf_opt->equal_homolog_coverage_test = opt->equal_homolog_coverage_test;
-    opt->vcf_opt->posthoc_coverage_test = opt->posthoc_coverage_test;
+	opt->vcf_opt->equal_homolog_coverage_test = opt->equal_homolog_coverage_test;
+	opt->vcf_opt->posthoc_coverage_test = opt->posthoc_coverage_test;
 	return err;
 
 CMDLINE_ERROR:
@@ -3201,8 +3201,8 @@ void fprint_usage(FILE *fp, const char *cmdname, void *obj) {
 		"\t\tToggle GL output to vcf files (Default: %s).\n", opt->vcf_opt->output_gl ? "yes" : "no");
 	fprintf(fp, "\t--name STRING\n"
 		"\t\tName of accession/individual/genotype; used in vcf header (Default: none).\n");
-    fprintf(fp, "\t--o <fout>\n\t\tSpecify file with "
-        "the final output (Default: none).\n");
+	fprintf(fp, "\t--o <fout>\n\t\tSpecify file with "
+		"the final output (Default: none).\n");
 	fprintf(fp, "\t++++++++++++++++++++++++++++++\n");
 	fprintf(fp, "\tError recalibration:  optional\n");
 	fprintf(fp, "\t++++++++++++++++++++++++++++++\n");
@@ -3213,7 +3213,6 @@ void fprint_usage(FILE *fp, const char *cmdname, void *obj) {
 //	fprintf(fp, "\t++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
 //	fprintf(fp, "\tScreening paralogs and other contaminants:  optional\n");
 //	fprintf(fp, "\t++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
-	fprintf(fp, "\t--po <pint>\n\t\tEqual coverage test. (Default: %d)\n", opt->equal_homolog_coverage_test);
 //	fprintf(fp, "\t--ampliclust <sampliclust>\n\t\tDrop reads aligning to "
 //		"low abundance haplotypes identified by amplicon clusterer "
 //				"executable <sampliclust> (Default: no).\n");
@@ -3235,6 +3234,7 @@ void fprint_usage(FILE *fp, const char *cmdname, void *obj) {
 	fprintf(fp, "\t+++++++++++++++++++++++++++++++++++++++++++\n");
 	fprintf(fp, "\tScreening reads, coverage checks:  optional\n");
 	fprintf(fp, "\t+++++++++++++++++++++++++++++++++++++++++++\n");
+	fprintf(fp, "\t--po <pint>\n\t\tEqual coverage test. (Default: %s)\n", opt->equal_homolog_coverage_test ? "yes" : "no");
 	fprintf(fp, "\t--expected_errors <dbl>\n\t\tDiscard reads with more "
 		"than <dbl> expected errors (Default: %f).\n", opt->max_eerr);
 	fprintf(fp, "\t--indel <i>\n\t\tDrop reads with alignments containing "
@@ -3249,7 +3249,7 @@ void fprint_usage(FILE *fp, const char *cmdname, void *obj) {
 		"%d)\n", opt->max_length);
 	fprintf(fp, "\t--secondary\n\t\tDrop secondary alignments (Default: "
 		"%s)\n", opt->drop_secondary ? "yes" : "no");
-	fprintf(fp, "\t--coverage <c>\n\t\tTunning parameter for penalty (Default: %.1f).\n", opt->weight_penalty);
+	fprintf(fp, "\t--coverage <c>\n\t\tTuning parameter for penalty (Default: %.1f).\n", opt->weight_penalty);
 	fprintf(fp, "\t--eq\n\t\tPost-hoc test of equal "
 		"coverage of homologous chromosomes. (Default: %s)\n",
 		opt->posthoc_coverage_test ? "no" : "yes");

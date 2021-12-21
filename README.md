@@ -147,5 +147,6 @@ The software requires multiple input files.
 We recommand using [MUMmer4](https://github.com/mummer4/mummer) to produce the SAM file for selected regions, command is given below.
 
 	```
-	nucmer --sam-long=combine --mum target_A_homeolog.fsa target_B_homeolog.fsa
+	nucmer --sam-long=combine --mum target_A.fa target_B.fa
 	```
+This will output a SAM file called combine.sam.

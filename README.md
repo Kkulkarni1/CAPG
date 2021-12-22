@@ -10,10 +10,8 @@ Skip to [Installation](#installation) to see how.
 1. [Command-Line Options](#options)
 1. [Input Files](#input)
 1. [Output](#output)
-1. [Troubleshooting](#troubleshooting)
 1. [Tutorial](#tutorial)
 1. [How to Cite](#cite)
-1. [Acknowledgements](#acknowledgements)
 1. [Contact](#contact)
 
 # Prerequisites <a name = "prerequisites" />
@@ -32,10 +30,10 @@ Skip to [Installation](#installation) to see how.
     git clone https://github.com/Kkulkarni1/CAPG.git
     ```
 
-2. Compile CAPG. The executable is called ```capg_wgs```.  It will appear in the ```CAPG/ksd-roshan_wgs``` directory you are currently in.
+2. Compile CAPG. The executable is called ```capg_wgs```.  It will appear in the ```CAPG/script_main/wgs``` directory you are currently in.
 
    ```sh
-   cd CAPG/ksd-roshan_wgs
+   cd CAPG/script_main/wgs
    make capg_wgs
    ```
 
@@ -56,7 +54,7 @@ NAME
 
 SYNOPSIS
 	capg_wgs --sam_files <fsam1> <fsam2> --fsa_files <fsa1> <fsa2> --ref_names <sref1> <sref2> --g <refsam> --j <reffsa>
-		[--sample <int> --min-subgenomic-coverage <dbl>]
+		[--vcf_files --min-subgenomic-coverage <dbl>]
 		[--min <int> --max <int> --expected-errors <dbl> --indel <int> --loglike <dbl> --secondary --soft-clipped <int> --coverage <dbl>]
 		[ --o <fout> --error_file|--error_data <ferr>] ...]
 
@@ -64,7 +62,7 @@ DESCRIPTION
 	capg_wgs genotypes tetraploids' targeted genome regions using screened reads in <fsam1> and <fsam2> aligned to the whole genome references from fasta files <fsa1> <fsa2>
 
 NOTICE
-	capg_wgs requires the reference names (appeared in <refsam>) to contain start (0 based) and end position (1 based) of the targeted genome regions relative to the whole genome. Using ':' to seperate original genome name (appeared in <fsam1> and <fsam2>) and region index, '-' to seperate start and end position (e.g. chr1:0-11, which starts at 1st position in 'chr1' and end at 11th position, length is 10 bases)
+	capg_wgs requires the reference names (appeared in <refsam>) to contain start (0 based) and end position (1 based) of the targeted genome regions relative to the whole genome. Using ':' to seperate original genome name (appeared in <fsam1> and <fsam2>) and region index, '-' to seperate start and end position (e.g. chr1:0-11, which starts at 1st position in 'chr1' and end at 11th position, length is 11 bases)
 
 OPTIONS
 	+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -79,9 +77,9 @@ OPTIONS
 	--geno <refsam>
 		Specify name of sam file of aligning <sref2> to <sref1> (Default: none)
 	--j <reffsa>
-		Specify name of targeted fsa files to be extracted  by samtools [Set samtools in system PATH] (Default: none)
+		Specify prefix of targeted fsa files to be extracted  by samtools [Set samtools in system PATH] (Default: extracted)
 	+++++++++++++++++
-	Output:  optional
+	Output:  all optional except for --vcf_files
 	+++++++++++++++++
 	--display_alignment
 		Display alignments in stderr output (Default: no).
@@ -147,6 +145,35 @@ The software requires multiple input files.
 We recommand using [MUMmer4](https://github.com/mummer4/mummer) to produce the SAM file for selected regions, command is given below.
 
 ```
-nucmer --sam-long=combine --mum target_A.fa target_B.fa
+nucmer --sam-long=ref --mum target_A.fa target_B.fa
 ```
-This will output a SAM file called combine.sam.
+This will output a SAM file called ref.sam.
+
+4. We also subset the targted regions from both reference whole genomes using Samtools, users can give prefix of the extracted regions using `-j` option.
+
+# Output <a name="output" />
+
+The genotyping output (required) for each subgenome are stored in [VCF files](https://samtools.github.io/hts-specs/VCFv4.2.pdf).
+
+# Tutorial <a name = "tutorial" />
+
+All the files used and created in this tutorial are in the `data` folder. 
+The selected regions we want to genotye are passed to `--ref_names`, in this example we will genotype positions 1 to 5000, the whole genome references are given to `--fsa_files` and the reads alignments to whole genome references are passed to `--sam_files`, the alignment of selected regions are passed to `--geno` and the prefix of selected regions can be given by `-j` (this will output prefix0.fsa and prefix1.fsa), and finally `--vcf_files` option output the genotypes.
+
+Only one command line is required for genotyping:
+
+```
+./capg_wgs --ref_names Genome_A:0-5000 Genome_B:0-5000 --sam_files ../../data/aln0A.sam ../../data/aln0B.sam --fsa_files ../../data/refA.fa ../../data/refB.fa --geno ../../data/ref.sam -j ../../data/extracted --vcf_files ../../data/A.vcf ../../data/B.vcf
+```
+
+The positions with coverage 0 will not be outputed
+
+# How to Cite <a name = "citing" />
+
+- This work is under review.  Please see [arxiv](url to be added).
+
+# Contact <a name = "contact" />
+
+If you have any problems with this software, please contact:
+
+Roshan Kulkarni (roshank@iastate.edu)

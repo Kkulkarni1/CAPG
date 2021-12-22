@@ -2816,7 +2816,7 @@ int default_options(options *opt)
 	}
 	opt->output_file = NULL;
 	opt->sample_name = NULL;
-	opt->extracted_rf = NULL;
+	opt->extracted_rf = "extracted";
 	opt->sam_file = NULL;
 	opt->ampliclust_command = NULL;
 	opt->ac_fastq_file = "union.fastq";
@@ -3153,7 +3153,7 @@ void fprint_usage(FILE *fp, const char *cmdname, void *obj) {
 	fprintf(fp, "\nNAME\n\t%s - genotype tetraploids\n", &cmdname[start]);
 	fprintf(fp, "\nSYNOPSIS\n\t%s --sam_files <fsam1> <fsam2> --fsa_files "
 		"<fsa1> <fsa2> --ref_names <sref1> <sref2> --g <refsam> --j <reffsa>\n\t\t"
-		"[--sample <int> --min-subgenomic-coverage <dbl>]\n\t\t"
+		"[--vcf_files --min-subgenomic-coverage <dbl>]\n\t\t"
 		"[--min <int> --max <int> --expected-errors <dbl> --indel <int> --loglike <dbl>"
 		" --secondary --soft-clipped <int> --coverage <dbl>]\n\t\t"
 //		"[--p <int> --amp <exe> [--ampliclust-f <ffastq> --ampliclust-o <str> --ampliclust-l <dbl>]]\n\t\t"
@@ -3186,10 +3186,10 @@ void fprint_usage(FILE *fp, const char *cmdname, void *obj) {
 						" files (Default: none)\n");
 	fprintf(fp, "\t--geno <refsam>\n\t\tSpecify name of sam file of aligning "
 		"<sref2> to <sref1> (Default: none)\n");
-	fprintf(fp, "\t--j <reffsa>\n\t\tSpecify name of targeted fsa files to be extracted "
-		" by samtools [Set samtools in system PATH] (Default: none)\n");
+	fprintf(fp, "\t--j <reffsa>\n\t\tSpecify prefix of targeted fsa files to be extracted "
+		" by samtools [Set samtools in system PATH] (Default: extracted)\n");
 	fprintf(fp, "\t+++++++++++++++++\n");
-	fprintf(fp, "\tOutput:  optional\n");
+	fprintf(fp, "\tOutput:  all optional except for --vcf_files\n");
 	fprintf(fp, "\t+++++++++++++++++\n");
 //	fprintf(fp, "\t--censor <int>\n\t\tCurrent code censors quality scores "
 //		"at maximum 41 [This option is not used!]\n");

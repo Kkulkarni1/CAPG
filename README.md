@@ -168,7 +168,7 @@ Only one command line is required for genotyping:
 
 The positions with coverage 0 will not be outputed
 
-# How to Cite <a name = "citing" />
+# How to Cite <a name = "cite" />
 
 - This work is under review.  Please see [arxiv](url to be added).
 
@@ -177,3 +177,99 @@ The positions with coverage 0 will not be outputed
 If you have any problems with this software, please contact:
 
 Roshan Kulkarni (roshank@iastate.edu)
+
+# Supplementary Materials
+
+We also have a similar software for genotyping amplicon sequences, here we briefly mention how to use it.
+
+## Installation
+
+Compile CAPG for amplicon. The executable is called ```roshan``` (will be updated).  It will appear in the ```CAPG/script_main/amplicon``` directory.
+
+   ```sh
+   cd CAPG/script_main/amplicon
+   make roshan
+   ```
+## Command-Line Options
+
+```
+ROSHAN(1)
+
+NAME
+	roshan - genotype tetraploids
+
+SYNOPSIS
+	roshan --sam_files SAM1 SAM2 --fasta_files FSA1 FSA2 --ref_names REF1 REF2
+		[[--genotype_by_clustering [--alignment FILE1 FILE2]]
+		[--sample INT --min-subgenomic-coverage FLOAT]
+		[--min INT --max INT --expected-errors FLOAT --indel INT --loglik FLOAT
+		 --min-posterior FLOAT --secondary --soft-clipped INT]
+		[--coverage FLOAT --biallelic FLOAT --equal_coverage_test [FLOAT1 FLOAT2]]
+		[--drop INT --amplici EXE [--amplici-f FILE --amplici-o STRING --amplici-l FLOAT]]
+		[--error_file|--error_data FILE] ...]
+
+DESCRIPTION
+	roshan genotypes allotetraploids using reads in SAM1 and SAM2 aligned to
+	REF1 and REF2 references from fasta files FSA1 FSA2.
+	SAM files typically contain reads from a single individual, genotype, or
+	accession aligned to multiple amplified targets, but roshan genotypes
+	one individual at one amplicon.
+
+OPTIONS
+
+Input (required):
+	--fasta_files FILE1 FILE2
+		Subgenomic reference fasta files (Default: none).
+		DEPRECATED: see --ref_fasta_files
+	--ref_fasta_files FILE1 FILE2
+		Subgenomic reference fasta files (Default: none).
+	--sam_files FILE1 FILE2
+		SAM files with reads aligned to each subgenome (Default: none)
+	--ref_names STRING1 STRING2
+		Names of subgenomic reference target regions (Default: none)
+	--ref_alignment FILE
+		SAM file containing alignment of references (Default: none)
+
+Output (optional):
+	--display_alignment
+		Display alignments in stderr output (Default: no).
+	--vcf_files FILE1 FILE2
+		Genotyping output in one vcf file per subgenome (Default: none).
+	--subref_fasta_files FILE|FILE1 FILE2
+		Subsetted reference regions output to these FASTA files (Default: subsetted_refs[12].fsa)
+	--gl
+		Toggle GL output to vcf files (Default: yes).
+	--name STRING
+		Name of accession/individual/genotype; used in vcf header (Default: sample).
+
+Estimation/Inference (optional):
+	--genotype_by_clustering
+		Genotype by clustering (Default: no).
+		Requires command-line arguments --amplici and --clustalo or --mafft.
+	--clustalo FILE
+		The clustal omega executable (Default: (null)).
+	--mafft FILE
+		The mafft executable (Default: (null)).
+	--alignment FILE1 FILE2
+		Alignment input FILE1 and output FILE2 (Default: selected_haplotypes.fa selected_haplotypes.co.fa)
+	--misalignment_rate FLOAT
+		Maximum allowed subgenomic misalignment rate in [0, 0.5) (Default: 0.30).
+		Tolerated proportion of reads from one subgenome aligning to the other.
+
+Screening paralogs and other contaminants (optional):
+	-p, --drop INT
+		Drop reads aligning to paralogs; -1 to automate (Default: -1)
+		Drop INT of four most abundant haplotypes if specified.
+		Requires command-line argument --amplici.
+	--amplici EXE
+		The amplicon denoiser software (Default: none).
+		Writes auxiliary files "amplici.fastq" "amplici.fa", and "amplici.out".
+		See https://github.com/DormanLab/AmpliCI for more information.
+	--amplici_fastq FILE
+		Selected reads output to this FASTQ file for denoising (Default: amplici.fastq).
+	--write-fastq [FILE]
+		Write fastq file for AmpliCI and quit (Default: no).
+		See --amplici_fastq to name the file.
+		With optional argument write named fastq file after AmpliCI paralog filtering (Default: none).
+```
+	

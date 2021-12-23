@@ -184,22 +184,22 @@ We also have a similar software for genotyping amplicon sequences, here we brief
 
 ## Installation
 
-Compile CAPG for amplicon. The executable is called ```roshan``` (will be updated).  It will appear in the ```CAPG/script_main/amplicon``` directory.
+Compile CAPG for amplicon. The executable is called ```capg_amp```.  It will appear in the ```CAPG/script_main/amplicon``` directory.
 
    ```sh
    cd CAPG/script_main/amplicon
-   make roshan
+   make capg_amp
    ```
 ## Command-Line Options
 
 ```
-ROSHAN(1)
+CAPG_AMP(1)
 
 NAME
-	roshan - genotype tetraploids
+	capg_amp - genotype tetraploids
 
 SYNOPSIS
-	roshan --sam_files SAM1 SAM2 --fasta_files FSA1 FSA2 --ref_names REF1 REF2
+	capg_amp --sam_files SAM1 SAM2 --fasta_files FSA1 FSA2 --ref_names REF1 REF2
 		[[--genotype_by_clustering [--alignment FILE1 FILE2]]
 		[--sample INT --min-subgenomic-coverage FLOAT]
 		[--min INT --max INT --expected-errors FLOAT --indel INT --loglik FLOAT
@@ -209,10 +209,10 @@ SYNOPSIS
 		[--error_file|--error_data FILE] ...]
 
 DESCRIPTION
-	roshan genotypes allotetraploids using reads in SAM1 and SAM2 aligned to
+	capg_amp genotypes allotetraploids using reads in SAM1 and SAM2 aligned to
 	REF1 and REF2 references from fasta files FSA1 FSA2.
 	SAM files typically contain reads from a single individual, genotype, or
-	accession aligned to multiple amplified targets, but roshan genotypes
+	accession aligned to multiple amplified targets, but capg_amp genotypes
 	one individual at one amplicon.
 
 OPTIONS

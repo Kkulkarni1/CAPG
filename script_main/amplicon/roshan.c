@@ -5393,7 +5393,7 @@ void fprint_usage(FILE *fp, const char *cmdname, void *obj)
 	for (size_t i = start; i < strlen(cmdname); ++i)
 		fputc(toupper(cmdname[i]), fp);
 	fprintf(fp, "(%d)\n", 1);
-	fprintf(fp, "\nNAME\n\t%s - genotype tetraploids\n", &cmdname[start]);
+	fprintf(fp, "\nNAME\n\t%s - genotype tetraploids (amplicon)\n", &cmdname[start]);
 	fprintf(fp, "\nSYNOPSIS\n"
 		"\t%s --sam_files SAM1 SAM2 --fasta_files FSA1 FSA2 --ref_names REF1 REF2\n"
 		"\t\t[[--genotype_by_clustering [--alignment FILE1 FILE2]]\n"

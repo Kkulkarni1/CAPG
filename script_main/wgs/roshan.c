@@ -1837,14 +1837,14 @@ int main(int argc, const char *argv[])
 		}
 		if (rf_info->info[my_refs[1]].strand_B) {
 			fprintf(stderr, "Genotype (%4zu, %4zu, %3zu, %3zu): %c%c/%c%c (%f) [",
-				target_a, target_b + 2, target_a - start_pos[0], target_b - start_pos[1],
+				target_a + 1, target_b + 1, target_a - start_pos[0], target_b - start_pos[1],
 				g1_max < 2 ? xy_to_char[nuc1] : xy_to_char[nuc2],
 				g1_max ? xy_to_char[nuc2] : xy_to_char[nuc1],
 				g2_max < 2 ? xy_to_char[nuc1] : xy_to_char[nuc2],
 				g2_max ? xy_to_char[nuc2] : xy_to_char[nuc1], mprob);
 			if (final_out) {
 				fprintf(final_out, "%s  %s  %4zu	%4zu",
-						opt.ref_names[0], opt.ref_names[1], target_a, target_b + 2);
+						opt.ref_names[0], opt.ref_names[1], target_a + 1, target_b + 1);
 			}
 		} else {
 			fprintf(stderr, "Genotype (%4zu, %4zu, %3zu, %3zu): %c%c/%c%c (%f) [",

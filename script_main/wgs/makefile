@@ -43,10 +43,10 @@ objs = $(srcs:.c=.o)
 deps = $(srcs:.c=.d)
 
 # remove source code that is not to be compiled into certain executables 
-roshan_objs = roshan.o sam.o sequence.o nuc.o qual.o error.o fastq.o align.o io.o cmdline.o order.o pick_reads.o vcf.o pgamma.o lgamma.o gamma.o lgammacor.o dpois.o pchisq.o dnorm.o pnorm.o fmax2.o cospi.o stirlerr.o bd0.o mlutils.o chebyshev.o
+capg_objs = capg.o sam.o sequence.o nuc.o qual.o error.o fastq.o align.o io.o cmdline.o order.o pick_reads.o vcf.o pgamma.o lgamma.o gamma.o lgammacor.o dpois.o pchisq.o dnorm.o pnorm.o fmax2.o cospi.o stirlerr.o bd0.o mlutils.o chebyshev.o
 
-capg_wgs:	$(roshan_objs)
-	$(CC) -o capg_wgs $(roshan_objs) $(CFLAGS) $(LDFLAGS) -lz
+capg_wgs:	$(capg_objs)
+	$(CC) -o capg_wgs $(capg_objs) $(CFLAGS) $(LDFLAGS) -lz
 
 include $(deps)
 

@@ -1,11 +1,11 @@
 /**
- * @file roshan.c
+ * @file capg.c
  * @author K. S. Dorman
  *
  * This file contains the code for genotyping allotetraploids.
  *
  * To compile:
- make roshan
+ make capg
  *
  * PLAN (searchable keyword) for whole-genome-sequencing genotyping:
  * - no need to filter by reference
@@ -20,7 +20,7 @@
 #include <unistd.h>
 #include <zlib.h>
 
-#include "roshan.h"
+#include "capg.h"
 #include "io.h"
 #include "cmdline.h"
 #include "array.h"
@@ -655,7 +655,7 @@ int main(int argc, const char *argv[])
 
 	/* process the command line */
 	default_options(&opt);
-	if (parse_options_roshan(&opt, argc, argv))
+	if (parse_options_capg(&opt, argc, argv))
 		exit(mmessage(ERROR_MSG, INVALID_CMDLINE, ""));
 
 	/* default reference options */
@@ -2663,7 +2663,7 @@ if (rf_index + se->cig->ashes[i].len > rf_pos2) {
 
 /**
  * Read the output file produced by ampliclust.  The input fastq file to ampliCI
- * excludes all reads already screened out by roshan.c, including those marked
+ * excludes all reads already screened out by capg.c, including those marked
  * as excluded in the merge hash.  This code is recording indices in the merge
  * hash that should be excluded because of closeness to low abundance
  * haplotypes.
@@ -2834,7 +2834,7 @@ int default_options(options *opt)
 	return NO_ERROR;
 } /* default_options */
 
-int parse_options_roshan(options *opt, int argc, const char **argv)
+int parse_options_capg(options *opt, int argc, const char **argv)
 {
 	int i, j;
 	int err = NO_ERROR;

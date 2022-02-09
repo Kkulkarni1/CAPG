@@ -2,7 +2,8 @@
 #define __VCF_H__
 
 #define VCF_VERSION 4.2
-#define ROSHAN_VERSION 1.0
+#define CAPG_VERSION 1.0
+#define CAPG_NAME capg
 
 typedef struct _vcf_options vcf_options;
 

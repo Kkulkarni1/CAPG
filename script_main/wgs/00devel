@@ -1,0 +1,11 @@
+TODO
+- add a homoeologous SNP call quality (equivalent to GQ) by quantifying how much more support the chosen configuration, e.g. 0/2, has relative to the next best
+
+BUG
+- Whey does this accession/locus in peanut have such low expected coverage.  Looking at the alignments, the coverage seems it should be at least 10 on both subgenomes and there is a clear(?) homoeologous SNP here:
+	err_files/SRR8737062/SRR8737062_494.err-DEBUG [roshan.c::main(1472)]: Expected counts genome A: 0.000 0.000 0.000 1.000
+	err_files/SRR8737062/SRR8737062_494.err-DEBUG [roshan.c::main(1474)]: Expected counts genome B: 0.000 0.000 0.000 1.000
+	err_files/SRR8737062/SRR8737062_494.err-Observed nucleotides (2): GG
+	err_files/SRR8737062/SRR8737062_494.err-Observed   qualities (2): FB
+	...
+	err_files/SRR8737062/SRR8737062_494.err:Genotype (41772411, 16094401,  33, 3497): GG/GG (0.444341) [ 0.444341 0.222185 0.000030 0.222207 0.111111 0.000015 0.000074 0.000037 0.000000]

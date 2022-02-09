@@ -15,7 +15,7 @@ void print_vcf_header(FILE *fp, vcf_options *vopt, const char *ref_file, const c
     fprintf(fp, "##fileformat=VCFv%.1f\n", VCF_VERSION);
     strftime(timestamp, 9, "%Y%m%d", localtime(&now));
     fprintf(fp, "##fileDate=%s\n", timestamp);
-    fprintf(fp, "##source=roshanV%.1f\n", ROSHAN_VERSION);
+    fprintf(fp, "##source=%s%.1f\n", CAPG_NAME, CAPG_VERSION);
     fprintf(fp, "##reference=%s\n", ref_file);
     fprintf(fp, "##phasing=no\n");
 //    fprintf(fp, "##INFO=<ID=DP,Number=1,Type=Integer,Description=\"Total Depth\">\n");

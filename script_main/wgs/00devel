@@ -3,7 +3,7 @@ TODO
 - Align indels such that indels in reads aligned to a reference correspond to nearby indels in alignment of subgenomic references. This will allow more loci to be genotyped, instead of being bypassed for no coverage. However this is risky if done blindly, and should only be considered if alignment score is the same
 
 BUG
-- [resolved] Why does this accession/locus in peanut have such low expected coverage?  Looking at the alignments, the coverage seems it should be at least 10 on both subgenomes and there is a clear(?) homoeologous SNP here:
+- [resolved] Why does this accession/locus in peanut have such low expected coverage?  Looking at the alignments, the coverage seems it should be at least 10 on both subgenomes and there is a clear(?) homoeologous SNP nearby:
 	err_files/SRR8737062/SRR8737062_494.err-DEBUG [roshan.c::main(1472)]: Expected counts genome A: 0.000 0.000 0.000 1.000
 	err_files/SRR8737062/SRR8737062_494.err-DEBUG [roshan.c::main(1474)]: Expected counts genome B: 0.000 0.000 0.000 1.000
 	err_files/SRR8737062/SRR8737062_494.err-Observed nucleotides (2): GG

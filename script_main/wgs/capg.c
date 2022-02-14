@@ -798,7 +798,7 @@ int main(int argc, const char *argv[])
 			me->exclude = 1;
 			mmessage(INFO_MSG, NO_ERROR, "Read %s does not "
 				 "align to all genomes (skipping).\n",
-				 se->name_s);
+				 sds[0]->se[me->indices[0][0]].name_s);
 			continue;
 		}
 		

@@ -51,6 +51,7 @@ struct _ref_entry {
 //	unsigned int strand_A;  	/* 0:forward, 1:reverse */
 	unsigned int strand_B;
 	int *idx_map;	 	/*<! which base in B is aligned to each base in A */
+	int *delta_len;		/*<! relative cumulative change in length relative to first reference */
 };
 
 
@@ -67,5 +68,7 @@ int parse_rf_options(options_rf *opt, int argc, char *argv[]);
 void extract_ref(const char *samtools_command, char *region, const char *ref_file, const char *ext_rf);
 void output_selected_reads(const char *f, sam **sds, merge_hash *mh);
 void match_pair(ref_info *rf_info, size_t my_refs);
+int match_soft_clipping(merge_hash *mh, unsigned int nalign, sam **sds, unsigned int b_rc);
+int match_extent(merge_hash *mh, unsigned int nalign, sam **sds, size_t *start_pos, size_t *end_pos, unsigned int B_strand);
 
 #endif /* pick_reads_h */

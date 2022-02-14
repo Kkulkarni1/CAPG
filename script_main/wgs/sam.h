@@ -110,12 +110,11 @@ int read_sam(FILE *fp, sam **s_in);
 int read_bam(gzFile gzfp, sam **s_in);
 
 /* processing */
-int hash_sam(sam *s, sam_hash **sh_in, int hash_on, size_t rindex, unsigned int n_ref, unsigned char drop_unmapped, unsigned char drop_second, unsigned char drop_soft_clipped, unsigned char drop_indel, unsigned int min_length, unsigned int max_length, double max_exp_err);
+int hash_sam(sam *s, sam_hash **sh_in, int hash_on, size_t rindex, unsigned int n_ref, unsigned char drop_unmapped, unsigned char drop_second, unsigned int drop_soft_clipped, unsigned int drop_indel, unsigned int min_length, unsigned int max_length, double max_exp_err);
 size_t hash_merge(merge_hash **mh, unsigned int nfiles, sam **sds, size_t *rindex);
-int match_soft_clipping(merge_hash *mh, unsigned int nalign, sam **sds,
-			size_t *start_pos, size_t *end_pos, unsigned int B_strand);
 int fill_hash(sam *s, sam_hash *sh, unsigned int n_ref);
 /* output */
 int output_error_data(FILE *fp, sam_entry *se, unsigned char *ref, double lprob);
+void reverse_in_place(sam_entry *se);
 
 #endif

@@ -32,7 +32,6 @@ gcc -O3 -Wall -pedantic -o sam sam.c sequence.c nuc.c qual.c error.c uthash.h fa
 #include "array.h"
 
 #define	N_FILES	4
-void reverse_in_place(sam_entry *se);
 double ll_align(sam_entry *se, unsigned char *ref);
 
 char cigar_char[CIGAR_NCHAR] = {'M', 'I', 'D', 'N', 'S', 'H', 'P', '=', 'X'};
@@ -127,11 +126,9 @@ int read_cigar(FILE *fp, cigar **cig_in)
  */
 int read_bam(gzFile fp, sam **s_in)
 {
-	int fxn_debug = ABSOLUTE_SILENCE;//DEBUG_I;//
-	char c, c1, c2;
-	unsigned int i = 0;
+//	int fxn_debug = ABSOLUTE_SILENCE;//DEBUG_I;//
 	size_t nchar = 0;
-	size_t schar = 0, qchar = 0;
+	size_t schar = 0;
 	size_t rchar = 0;
 	int32_t i32 = 0, block_size;
 	uint32_t ui32 = 0;
@@ -605,460 +602,15 @@ size_t hash_merge(merge_hash **mh, unsigned int nfiles, sam **sds, size_t *rinde
 
 /* reverse in plcae */
 void reverse_in_place(sam_entry *se) {
-    for (unsigned int i = 0; i < se->cig->n_ashes/2; ++i) {
-        unsigned int tmp_type = se->cig->ashes[se->cig->n_ashes-i-1].type;
-        se->cig->ashes[se->cig->n_ashes-i-1].type = se->cig->ashes[i].type;
-        se->cig->ashes[i].type = tmp_type;
-        unsigned int tmp_len = se->cig->ashes[se->cig->n_ashes-i-1].len;
-        se->cig->ashes[se->cig->n_ashes-i-1].len = se->cig->ashes[i].len;
-        se->cig->ashes[i].len = tmp_len;
-    }
-}
-
-/**
- * For a merged hash, where multiple alignments per read are combined,
- * reset the alignments to cover the minimum covered region by soft-clipping
- * as necessary. If a reference is reverse complemented relative to the first
- * reference in reference alignments, reverse the cigar string temporarily
- * while soft-clipping. An alternative, more complicated solution is to
- * extend the alignment.
- *
- *
- * @param mh		pointer to the merged hash
- * @param nalign	number of alignments
- * @param sds		sam hashes, one per reference
- * @param start_pos	minimum start position of all reads per alignment
- *			(0-base reference index)
- * @param end_pos	maximum end position of all reads per alignment
- *			(1-base reference index) [it is start_pos + length of ref region]
- * @param B_strand	indicate if B subgenome reference is reverse
- *			complemented relative to A subgenome reference
- * [TODO,KSD] B_strand should be array unsigned int[N_FILES]
- * [question: should we consider the homolegous region of A and B here?]
- */
-int match_soft_clipping(merge_hash *mh, unsigned int nalign, sam **sds,
-		size_t *start_pos, size_t *end_pos, unsigned int B_strand)
-{
-	int fxn_debug = ABSOLUTE_SILENCE;//DEBUG_I;
-	size_t n_reads = 0;
-
-	debug_msg(fxn_debug >= DEBUG_I, fxn_debug, "Maximum extents:\n");
-	for (unsigned int j = 0; j < nalign; ++j)
-		debug_msg_cont(fxn_debug >= DEBUG_I, fxn_debug, "\t%zu-\n",
-								start_pos[j]);
-
-	for (merge_hash *me = mh; me != NULL; me = me->hh.next, ++n_reads) {
-		unsigned int start_rpos = 0, end_rpos = UINT_MAX;
-
-		if (me->exclude)
-			continue;
-
-		/* find minimum alignment extent w/o soft clipping (need to consider reverse complemented of B) */
-		// If B is RC, then reset read algned to genome B: se->pos to be the one relative to the reversed B
-        unsigned int rf_idxb = 0;	/* KSD,BUG,TODO Should be array unsigned int[N_FILES] */
-        unsigned int tmp_len = 0;
-        /* B reference is reverse complemented: reverse ashes and
-         * starting alignment position is ending alignment position
-         */
-
-		/* find extent of alignments: get minimum extent */
-		for (unsigned int j = 0; j < nalign; ++j) {
-			sam_entry *se = &sds[j]->se[me->indices[j][0]];
-			unsigned int rf_idx = 0;
-            
-            if (j && B_strand) {
-                
-                if (se->cig->ashes[0].type == CIGAR_SOFT_CLIP) {
-                    tmp_len = se->cig->ashes[0].len;
-                }
-                /* KSD,TODO Better way is to reverse in place: for (i = 0; i < se2->cig->n_ashes/2; ++i) {unsigned int tmp_type = se2->cig->ashes[se2->cig->n_ashes-i-1].type; se2->cig->ashes[se2->cig->n_ashes-i-1].type = se2->cig->ashes[i].type; se2->cig->ashes[i].type = tmp_type;}
-                 * Also, copy and reverse should be done by inline functions, just in case the ashes struct changes definition, although if you do in place, there is less risk since the newly defined parts of ash will not be affected.
-                 */
-                // Good to know, reverse in place is more efficient
-                reverse_in_place(se);
-                
-                /* starting index is ending index: precompute */
-                rf_idxb = end_pos[j] - (se->pos + se->cig->length_rf) + 1; // 1 based end_pos
-//
-                /* subgenome reverse complemented */
-                rf_idx = rf_idxb;
-            } else
-				rf_idx = se->pos - 1 - start_pos[j]; // 0-based
-					/* guaranteed >= 0 */
-
-			if (rf_idx > start_rpos)
-				start_rpos = rf_idx;
-//            fprintf(stderr, "%zu %zu ", se->pos, se->cig->length_rf);
-//			fprintf(stderr, "rf_idx: %d\n", rf_idx);
-            rf_idx += se->cig->length_rf;
-			if (rf_idx < end_rpos)
-				end_rpos = rf_idx;
-
-		}
-
-		debug_msg(fxn_debug >= DEBUG_I, fxn_debug, "Read minimum "
-			"extent: %u-%u (0 index on extent: start_pos = %zu)\n",
-					 start_rpos, end_rpos, start_pos[0]);
-
-		if (end_rpos <= start_rpos) {
-			me->exclude = 1;
-			mmessage(INFO_MSG, NO_ERROR, "Read %s filtered.\n",
-					sds[1]->se[me->indices[1][0]].name_s);	/* KSD,TODO just use se->name */
-			continue;
-		}
-
-		/* remake ashes to soft clip to minimum alignment extent */
-		for (unsigned int j = 0; j < nalign; ++j) {
-			sam_entry *se = &sds[j]->se[me->indices[j][0]];
-			unsigned int rf_idx = 0;
-			unsigned int first_ash_nlen = 0, n_ashes = 0;
-			unsigned int out = 0, diff_extent = 0;
-            
-			if (j && B_strand)	/* subgenome reverse complemented */
-				rf_idx = rf_idxb;
-			else
-				rf_idx = se->pos - 1 - start_pos[j];
-
-			for (unsigned int i = 0; i < se->cig->n_ashes; ++i) {
-				if (se->cig->ashes[i].type == CIGAR_DELETION
-					|| se->cig->ashes[i].type == CIGAR_MATCH
-					|| se->cig->ashes[i].type == CIGAR_MMATCH
-					|| se->cig->ashes[i].type == CIGAR_MISMATCH
-					|| se->cig->ashes[i].type == CIGAR_SKIP)
-					rf_idx += se->cig->ashes[i].len;
-
-				debug_msg(fxn_debug >= DEBUG_I, fxn_debug, 
-					"Read %s (%zu), alignment %u: rf_idx=%u"
-					" (%u - %u)\n", se->name, n_reads, j,
-						rf_idx, start_rpos, end_rpos);
-
-				/* --R--[--...--]--... OR --R--]--... */
-				if (!n_ashes && rf_idx <= start_rpos) {
-					diff_extent = 1;
-					++n_ashes;
-				} else if (rf_idx <= start_rpos) {
-					continue;
-				/* [--R--... OR [--R--]--... OR --[--R--... OR --[--R--]--... */
-				} else if (!n_ashes && rf_idx > start_rpos
-					&& rf_idx <= end_rpos) {
-					if (start_rpos > se->pos - start_pos[j] - 1) {
-						diff_extent = 1;
-						n_ashes += 2;
-					} else {
-						++n_ashes;
-					}
-				/* --[--]--R--... OR [--]--R-- */
-				} else if (!n_ashes && rf_idx > end_rpos) {
-					diff_extent = 1;
-					n_ashes += 2 + (start_rpos
-						> se->pos - start_pos[j] - 1);
-				/* ...--[--R--]--... OR ...--[--R--... */
-				} else if (n_ashes && rf_idx <= end_rpos) {
-					++n_ashes;
-				/* ...--[--]--R--... */
-				} else if (n_ashes && rf_idx > end_rpos) {
-					diff_extent = 1;
-					n_ashes += 2;
-				}
-
-				if (rf_idx > end_rpos)
-					break;
-			}
-
-			debug_msg_cont(fxn_debug >= DEBUG_I, fxn_debug,
-				"\n\tFile %u old cigar: ", j);
-			for (unsigned int i = 0; i < se->cig->n_ashes; ++i)
-				debug_msg_cont(fxn_debug >= DEBUG_I, fxn_debug,
-						"%u%c", se->cig->ashes[i].len,
-					cigar_char[se->cig->ashes[i].type]);
-			debug_msg_cont(fxn_debug >= DEBUG_I, fxn_debug, "\n");
-
-			ash *new_ashes = se->cig->ashes;
-			if (diff_extent) {
-				debug_msg(fxn_debug >= DEBUG_I, fxn_debug, 
-					"Readjusting read %zu from %u ashes to "
-					"%u ashes\n", n_reads, se->cig->n_ashes,
-									n_ashes);
-				new_ashes = malloc(n_ashes * sizeof *se->cig);
-			}
-			
-			if (j && B_strand)	/* subgenome reverse complemented */
-				rf_idx = rf_idxb;
-			else
-				rf_idx = se->pos - 1 - start_pos[j];
-
-			n_ashes = 0;
-			for (unsigned int i = 0; i < se->cig->n_ashes; ++i) {
-
-				if (se->cig->ashes[i].type == CIGAR_DELETION
-					|| se->cig->ashes[i].type == CIGAR_MATCH
-					|| se->cig->ashes[i].type == CIGAR_MMATCH
-					|| se->cig->ashes[i].type == CIGAR_MISMATCH
-					|| se->cig->ashes[i].type == CIGAR_SKIP)
-					rf_idx += se->cig->ashes[i].len;
-
-				debug_msg(fxn_debug >= DEBUG_I, fxn_debug,
-					"%u%c: rf_idx = %u; n_ashes = %u, "
-					"first_ash_nlen = %u (%u-%u)\n",
-					se->cig->ashes[i].len,
-					cigar_char[se->cig->ashes[i].type],
-					rf_idx, n_ashes, first_ash_nlen,
-							start_rpos, end_rpos);
-
-				/* read nucleotides 5' of joint cover */
-				if (!n_ashes && rf_idx < start_rpos) {
-
-					/* add to 5' soft-clip if read nucs consumed */
-					/* adjust alignment position if adding soft clip */
-					if (se->cig->ashes[i].type == CIGAR_MATCH
-						|| se->cig->ashes[i].type == CIGAR_MMATCH
-						|| se->cig->ashes[i].type == CIGAR_MISMATCH) {
-						first_ash_nlen += se->cig->ashes[i].len;
-						se->pos += se->cig->ashes[i].len;
-					} else if (se->cig->ashes[i].type == CIGAR_SOFT_CLIP
-						|| se->cig->ashes[i].type == CIGAR_INSERTION) {
-						first_ash_nlen += se->cig->ashes[i].len;
-					} else if (se->cig->ashes[i].type == CIGAR_DELETION) {
-						se->pos += se->cig->ashes[i].len;
-					}
-
-				/* next ash starts coincident with joint cover
-				 * and read nucs have been consumed: combine all
-				 * consumed read nucs into 5' soft clip
-				 */
-				} else if (!n_ashes && rf_idx == start_rpos && first_ash_nlen) {
-
-					/* add to 5' soft-clip if read nucs consumed */
-					if (se->cig->ashes[i].type == CIGAR_MATCH
-						|| se->cig->ashes[i].type == CIGAR_MMATCH
-						|| se->cig->ashes[i].type == CIGAR_MISMATCH) {
-						first_ash_nlen += se->cig->ashes[i].len;
-						se->pos += se->cig->ashes[i].len;
-					} else if (se->cig->ashes[i].type == CIGAR_SOFT_CLIP
-						|| se->cig->ashes[i].type == CIGAR_INSERTION) {
-						first_ash_nlen += se->cig->ashes[i].len;
-					} else if (se->cig->ashes[i].type == CIGAR_DELETION) {
-						se->pos += se->cig->ashes[i].len;
-					}
-					new_ashes[n_ashes].type = CIGAR_SOFT_CLIP;
-					new_ashes[n_ashes].len = first_ash_nlen;
-					++n_ashes;
-
-				debug_msg(fxn_debug >= DEBUG_I, fxn_debug,
-					"Adding first ash: %uS\n", first_ash_nlen);
-
-				/* next ash starts coincident with joint cover
-				 * and there has been no 5' consumption of read
-				 * nucs: the only explanation is clipping, which
-				 * we retain as is.
-				 */
-				} else if (!n_ashes && rf_idx == start_rpos) {
-
-					new_ashes[n_ashes].type = se->cig->ashes[i].type;
-					new_ashes[n_ashes].len = se->cig->ashes[i].len;
-					++n_ashes;
-
-					debug_msg(fxn_debug >= DEBUG_I, fxn_debug,
-						"Adding first ash: %u%c\n",
-						 se->cig->ashes[i].len,
-						 	cigar_char[
-							se->cig->ashes[i].type]);
-
-				/* next ash ends inside joint cover:
-				 * soft clip includes any consumed read
-				 * nucleotides, including part of current
-				 * ash before joint cover, if any.
-				 */
-				} else if (!n_ashes && rf_idx > start_rpos
-							&& rf_idx <= end_rpos) {
-
-					/* add to 5' soft-clip if read nucs consumed */
-					if (se->cig->ashes[i].type == CIGAR_MATCH
-						|| se->cig->ashes[i].type == CIGAR_MMATCH
-						|| se->cig->ashes[i].type == CIGAR_MISMATCH ) {
-						first_ash_nlen += start_rpos
-							+ se->cig->ashes[i].len - rf_idx;
-						se->pos += start_rpos
-							+ se->cig->ashes[i].len - rf_idx;
-					} else if (se->cig->ashes[i].type == CIGAR_SOFT_CLIP
-						|| se->cig->ashes[i].type == CIGAR_INSERTION) {
-						first_ash_nlen += start_rpos
-							+ se->cig->ashes[i].len - rf_idx;
-					} else if (se->cig->ashes[i].type == CIGAR_DELETION) {
-						se->pos += start_rpos
-							+ se->cig->ashes[i].len - rf_idx;
-					}
-					if (first_ash_nlen) {
-						new_ashes[n_ashes].type = CIGAR_SOFT_CLIP;
-						new_ashes[n_ashes].len = first_ash_nlen;
-
-						debug_msg(fxn_debug >= DEBUG_I, fxn_debug,
-							"Adding first ash: %uS (%u)\n",
-								new_ashes[n_ashes].len,
-									first_ash_nlen);
-
-						++n_ashes;
-					}
-
-					new_ashes[n_ashes].type = se->cig->ashes[i].type;
-					new_ashes[n_ashes].len = rf_idx - start_rpos;
-					++n_ashes;
-
-					debug_msg(fxn_debug >= DEBUG_I, fxn_debug,
-						"Adding first/second ash: %u%c\n",
-						rf_idx - start_rpos, cigar_char[
-							se->cig->ashes[i].type]);
-
-				/* next ash ends beyond joint cover:
-				 */
-				} else if (!n_ashes && rf_idx > end_rpos) {
-
-					/* add to 5' soft-clip if read nucs consumed */
-					if (se->cig->ashes[i].type == CIGAR_MATCH
-						|| se->cig->ashes[i].type == CIGAR_MMATCH
-						|| se->cig->ashes[i].type == CIGAR_MISMATCH) {
-						first_ash_nlen +=  start_rpos
-							+ se->cig->ashes[i].len - rf_idx;
-						se->pos += start_rpos
-							+ se->cig->ashes[i].len - rf_idx;
-					} else if (se->cig->ashes[i].type == CIGAR_INSERTION
-						|| se->cig->ashes[i].type == CIGAR_SOFT_CLIP) {
-						first_ash_nlen +=  start_rpos
-							+ se->cig->ashes[i].len - rf_idx;
-					} else if (se->cig->ashes[i].type == CIGAR_DELETION) {
-						se->pos += start_rpos
-							+ se->cig->ashes[i].len - rf_idx;
-					}
-
-					if (first_ash_nlen) {
-						new_ashes[n_ashes].type = CIGAR_SOFT_CLIP;
-						new_ashes[n_ashes].len = first_ash_nlen;
-
-						debug_msg(fxn_debug >= DEBUG_I, fxn_debug,
-							"Adding first ash: %uS (%u)\n", 
-							new_ashes[n_ashes].len, first_ash_nlen);
-
-						++n_ashes;
-					}
-
-					new_ashes[n_ashes].type = se->cig->ashes[i].type;
-					new_ashes[n_ashes].len = end_rpos - start_rpos;
-
-					debug_msg(fxn_debug >= DEBUG_I, fxn_debug,
-						"Adding first/second ash: %u%c\n",
-						end_rpos - start_rpos,
-						cigar_char[se->cig->ashes[i].type]);
-
-					++n_ashes;
-
-					new_ashes[n_ashes].type = CIGAR_SOFT_CLIP;
-					new_ashes[n_ashes].len = rf_idx - end_rpos;
-
-					debug_msg(fxn_debug >= DEBUG_I, fxn_debug,
-						"Adding second/third ash: %u%c\n",
-						rf_idx - end_rpos,
-						cigar_char[CIGAR_SOFT_CLIP]);
-
-					++n_ashes;
-					out = 1;
-
-				/* next ash is fully contained in joint cover:
-				 * copy as is
-				 */
-				} else if (n_ashes && rf_idx <= end_rpos) {
-					new_ashes[n_ashes].type = se->cig->ashes[i].type;
-					new_ashes[n_ashes].len = se->cig->ashes[i].len;
-					++n_ashes;
-
-					debug_msg(fxn_debug >= DEBUG_I, fxn_debug,
-						"Adding fully contained later ash: %u%c\n",
-						se->cig->ashes[i].len,
-						cigar_char[se->cig->ashes[i].type]);
-
-				/* next ash passes outside joint cover for the
-				 * first time:
-				 */
-				} else if (n_ashes && rf_idx > end_rpos && !out) {
-					new_ashes[n_ashes].type = se->cig->ashes[i].type;
-					new_ashes[n_ashes].len = end_rpos + se->cig->ashes[i].len - rf_idx;
-
-					debug_msg(fxn_debug >= DEBUG_I, fxn_debug,
-						"Adding later split ash: %u%c\n",
-						new_ashes[n_ashes].len,
-						cigar_char[se->cig->ashes[i].type]);
-
-					++n_ashes;
-					new_ashes[n_ashes].type = CIGAR_SOFT_CLIP;
-					new_ashes[n_ashes].len = se->cig->ashes[i].len - new_ashes[n_ashes - 1].len;
-
-					debug_msg(fxn_debug >= DEBUG_I, fxn_debug,
-						"Adding first version of last ash: %u%c\n",
-						new_ashes[n_ashes].len,
-						cigar_char[CIGAR_SOFT_CLIP]);
-
-					++n_ashes;
-					out = 1;
-
-				/* next ash is still outside joint cover */
-				} else if (n_ashes && rf_idx > end_rpos && out
-					&& (se->cig->ashes[i].type == CIGAR_INSERTION
-						|| se->cig->ashes[i].type == CIGAR_MATCH
-						|| se->cig->ashes[i].type == CIGAR_MMATCH
-						|| se->cig->ashes[i].type == CIGAR_MISMATCH
-						|| se->cig->ashes[i].type == CIGAR_SOFT_CLIP)) {
-					new_ashes[n_ashes-1].len += se->cig->ashes[i].len;
-
-					debug_msg(fxn_debug >= DEBUG_I, fxn_debug,
-						"Adding to last ash: %u%c\n",
-						new_ashes[n_ashes-1].len,
-							cigar_char[CIGAR_SOFT_CLIP]);
-				}
-			}
-
-			if (fxn_debug >= DEBUG_I) {
-				debug_msg_cont(fxn_debug >= DEBUG_I, fxn_debug,
-					"\tread %s new cigar: ", se->name_s);	/* TODO,KSD just use name */
-				for (unsigned int i = 0; i < n_ashes; ++i)
-					debug_msg_cont(fxn_debug >= DEBUG_I,
-						fxn_debug, "%u%c",
-						new_ashes[i].len,
-						cigar_char[new_ashes[i].type]);
-				debug_msg_cont(fxn_debug >= DEBUG_I,
-					fxn_debug, " (n_ashes = %u)\n", n_ashes);
-			}
-
-			// if B is RC, this need to be reverted again for computing the likelihood...
-			se->cig->ashes = new_ashes;
-			se->cig->n_ashes = n_ashes;
-           
-			if (B_strand && j) {	/* TODO also shouldn't you do outside the for (j...) loop anyway? */
-				// revert the sigar string
-
-                reverse_in_place(se);
-                /* recompute se->pos if the first ash is S but the old is not */
-               if (se->cig->ashes[0].type == CIGAR_SOFT_CLIP)
-                   se->pos += (se->cig->ashes[0].len - tmp_len);
-//                fprintf(stderr, "%d %d|len %zu: \n", se->cig->ashes[0].len, tmp_len, se->pos);
-			}
-
-			/* recompute se->cig->length_rf */
-			se->cig->length_rf  = 0;
-			
-			for (unsigned int l = 0; l < se->cig->n_ashes; ++l) {
-//				fprintf(stderr, "len %d: , type %d   ", se->cig->ashes[j].len, se->cig->ashes[j].type);
-				if (se->cig->ashes[l].type == CIGAR_DELETION ||
-					se->cig->ashes[l].type == CIGAR_MATCH ||
-					se->cig->ashes[l].type == CIGAR_MISMATCH ||
-					se->cig->ashes[l].type == CIGAR_MMATCH ||
-					se->cig->ashes[l].type == CIGAR_SKIP)
-					se->cig->length_rf += se->cig->ashes[l].len;
-			}
-//				fprintf(stderr, "\n");
-		}
+	for (unsigned int i = 0; i < se->cig->n_ashes/2; ++i) {
+		unsigned int tmp_type = se->cig->ashes[se->cig->n_ashes-i-1].type;
+		se->cig->ashes[se->cig->n_ashes-i-1].type = se->cig->ashes[i].type;
+		se->cig->ashes[i].type = tmp_type;
+		unsigned int tmp_len = se->cig->ashes[se->cig->n_ashes-i-1].len;
+		se->cig->ashes[se->cig->n_ashes-i-1].len = se->cig->ashes[i].len;
+		se->cig->ashes[i].len = tmp_len;
 	}
-
-	return NO_ERROR;
-} /* match_soft_clip */
+} /* reverse_in_place */
 
 
 /**
@@ -1096,8 +648,8 @@ hash_sam (
 	unsigned int n_ref,
 	unsigned char drop_unmapped,
 	unsigned char drop_second,
-	unsigned char drop_sc,
-	unsigned char drop_id,
+	unsigned int drop_sc,
+	unsigned int drop_id,
 	unsigned int min_length,
 	unsigned int max_length,
 	double max_exp_err)
@@ -1165,7 +717,7 @@ hash_sam (
 			continue;
 		}
 
-		if (max_length || min_length || drop_sc || drop_id) {
+		if (max_length || min_length || drop_sc < UINT_MAX || drop_id < UINT_MAX) {
 			len = len_sc = len_hc = len_id = 0;
 			for (unsigned j = 0; j < se->cig->n_ashes; ++j) {
 				if (se->cig->ashes[j].type == CIGAR_SOFT_CLIP
@@ -1185,7 +737,7 @@ hash_sam (
 					|| se->cig->ashes[j].type == CIGAR_SOFT_CLIP)
 					len += se->cig->ashes[j].len;
 			}
-			if (drop_sc && len_sc >= drop_sc) {
+			if (drop_sc < UINT_MAX && len_sc >= drop_sc) {
 				se->exclude = 1;
 				if (se->which_ref == rindex) {
 					debug_msg_cont(fxn_debug >= DEBUG_I, fxn_debug, "remove %s b/c soft clipped %uS\n", se->name, len_sc);
@@ -1196,7 +748,7 @@ hash_sam (
 				continue;
 
 			/* assume if user doesn't want soft-clipping, they also don't want hard-clipping */
-			} else if (drop_sc && len_hc >= drop_sc) {
+			} else if (drop_sc < UINT_MAX && len_hc >= drop_sc) {
 				se->exclude = 1;
 				if (se->which_ref == rindex) {
 					debug_msg_cont(fxn_debug >= DEBUG_I, fxn_debug, "remove %s b/c hard clipped\n", se->name);
@@ -1206,7 +758,7 @@ hash_sam (
 				}
 				continue;
 			}
-			if (drop_id && len_id >= drop_id) {
+			if (drop_id < UINT_MAX && len_id >= drop_id) {
 				se->exclude = 1;
 				if (se->which_ref == rindex) {
 					debug_msg_cont(fxn_debug >= DEBUG_I, fxn_debug, "remove %s b/c of indels\n", se->name);
@@ -1216,7 +768,7 @@ hash_sam (
 				}
 				continue;
 			}
-			if (len > max_length) {
+			if (max_length && len > max_length) {
 //mmessage(INFO_MSG, NO_ERROR, "Read %s length: %u\n", se->name, len);
 				se->exclude = 1;
 				if (se->which_ref == rindex) {
@@ -1308,8 +860,9 @@ hash_sam (
 		mmessage(INFO_MSG, NO_ERROR, "%zu unmapped reads filtered\n",
 								n_unmapped);
 	
-	mmessage(INFO_MSG, NO_ERROR, "%zu targeted unmapped reads filtered\n",
-			 n_targeted_unmapped);
+	if (n_targeted_unmapped)
+		mmessage(INFO_MSG, NO_ERROR, "%zu targeted unmapped reads "
+					"filtered\n", n_targeted_unmapped);
 
 	if (drop_second)
 		mmessage(INFO_MSG, NO_ERROR, "%zu secondary alignments "
@@ -1320,7 +873,7 @@ hash_sam (
 			" length outside range (%u, %u)\n", n_min_length,
 				n_max_length, min_length, max_length);
 
-	if (drop_sc) {
+	if (drop_sc < UINT_MAX) {
 		mmessage(INFO_MSG, NO_ERROR, "%zu reads filtered because soft "
 			"clip length exceeds %u\n", n_soft_clip,
 			(unsigned int) drop_sc);
@@ -1330,11 +883,11 @@ hash_sam (
 				n_hard_clip, (unsigned int) drop_sc);
 	}
 
-	if (drop_id)
+	if (drop_id < UINT_MAX)
 		mmessage(INFO_MSG, NO_ERROR, "%zu reads filtered because indel "
-			"length exceeds %u\n", n_indel, (unsigned int) drop_id);
+			"length exceeds %u\n", n_indel, drop_id);
 
-	if (max_exp_err > 0)
+	if (isfinite(max_exp_err))
 		mmessage(INFO_MSG, NO_ERROR, "%zu reads filtered because "
 			"expected number of errors exceeded %f\n", n_experr,
 								max_exp_err);

@@ -798,7 +798,9 @@ int main(int argc, const char *argv[])
 			me->exclude = 1;
 			mmessage(INFO_MSG, NO_ERROR, "Read %s does not "
 				 "align to all genomes (skipping).\n",
-				 sds[0]->se[me->indices[0][0]].name_s);
+				me->indices[0]	// TODO: hack
+				? sds[0]->se[me->indices[0][0]].name_s
+				: sds[1]->se[me->indices[1][0]].name_s);
 			continue;
 		}
 		
@@ -807,8 +809,8 @@ int main(int argc, const char *argv[])
 			
 			if (me->count[j] > 1)
 				exit(mmessage(ERROR_MSG, INTERNAL_ERROR,
-						  "Read %u aligns twice in genome %s.\n",
-						  j, sds[j]->se[me->indices[j][0]].name_s));
+					"Read %s aligns twice in genome %u.\n",
+					 sds[j]->se[me->indices[j][0]].name_s, j));
 			
 			n_align += me->count[j];
 			se = &sds[j]->se[me->indices[j][0]];

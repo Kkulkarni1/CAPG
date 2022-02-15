@@ -638,7 +638,7 @@ debug_msg(fxn_debug >= DEBUG_I, fxn_debug, "Read %s to be soft-clip extended fro
 				}
 			}
 			if (n_ashes)
-				new_ashes = malloc((se->cig->n_ashes + n_ashes) + sizeof(*new_ashes));
+				new_ashes = malloc((se->cig->n_ashes + n_ashes) * sizeof(*new_ashes));
 			else
 				new_ashes = se->cig->ashes;
 			for (unsigned int i = 0; i <= idx; ++i) {

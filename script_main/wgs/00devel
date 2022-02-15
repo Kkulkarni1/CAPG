@@ -41,6 +41,9 @@ err_files/SRR8737062/SRR8737062_876.err:Genotype (12736065, 17562979, 7063, 5723
             TCTTTTCTTT TGGTTTCTTT TTCTTAATGA GGCGGAGTGG AGGCAAGCCT
             .G.....-.. .......... .......... .......... ..........
 
+NEW RESULTS AFTER DEBUG
+SRR4124078: Genotype (12736065, 17562979, 7063, 5723): TT/CC (0.999872) [ 0.000000 0.000000 0.000000 0.000096 0.000000 0.000000 0.999872 0.000032 0.000000]+++
+
 
 - Another case: It is true the nearest homoeologous SNP is far away, but all reads traversing it resolve correctly, so why more support for heterozygote than homozygote?
 err_files/SRR4124062/SRR4124062_359.err:Genotype (115781263, 127721644, 5118, 5124): GG/TT (0.768800) [ 0.000000 0.000000 0.000000 0.214855 0.011634 0.000000 0.768800 0.004712 0.000000]+++
@@ -57,6 +60,11 @@ err_files/SRR8736998/SRR8736998_359.err:Genotype (115781263, 127721644, 5118, 51
 err_files/SRR8737008/SRR8737008_359.err:Genotype (115781263, 127721644, 5118, 5124): TG/TT (0.676657) [ 0.000000 0.000000 0.000000 0.676657 0.009969 0.000000 0.312763 0.000612 0.000000]***
 err_files/SRR8737061/SRR8737061_359.err:Genotype (115781263, 127721644, 5118, 5124): GG/TT (0.921932) [ 0.000000 0.066984 0.921932 0.000000 0.007645 0.003439 0.000000 0.000000 0.000000]+++
 err_files/SRR8737062/SRR8737062_359.err:Genotype (115781263, 127721644, 5118, 5124): GG/TT (0.925369) [ 0.000000 0.000000 0.000000 0.054958 0.012598 0.000000 0.925369 0.007075 0.000000]+++
+
+NEW RESULTS
+SRR4124078: Genotype (115781263, 127721644, 5118, 5124): GG/TT (0.470642) [ 0.000000 0.000000 0.000000 0.003144 0.209971 0.000000 0.470642 0.316243 0.000000]+++
+The reason the confidence is so low is because there are two reads of low quality that use the ##### quality scores that Illumina used to use to signal the downstream methods to truncate. However, since we do not truncate the read, we interpret the quality # as very low quality. These two reads do not traverse any other mismatches, and the locus in question has quality score #. Therefore, there is very little evidence to assign it to the correct subgenome.
+
 
 - Another case: Few reads traverse the upstream homoeologous SNP (and mismatch), but those that do (except for one case) have them linked, so why so much heterozygosity
 err_files/SRR4124062/SRR4124062_515.err:Genotype (34885418, 22446113, 3643, 2835): AG/AG (0.946376) [ 0.000000 0.000000 0.000000 0.053587 0.946376 0.000031 0.000003 0.000004 0.000000]***

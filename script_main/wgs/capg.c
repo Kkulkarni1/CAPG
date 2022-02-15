@@ -928,7 +928,7 @@ int main(int argc, const char *argv[])
 	double A_expected_coverage = 0;
 	unsigned char show = opt.display_alignment;
 	
-	int tmp_debug = 0;
+	//int tmp_debug = 0;
 	for (merge_hash *me = mh; me != NULL; me = me->hh.next) {
 		
 		if (me->exclude) {
@@ -938,16 +938,17 @@ int main(int argc, const char *argv[])
 		}
 		
 		double sum = 0, max = -INFINITY;
+		//show = n_read == 955;
 
 		for (unsigned int j = 0; j < N_FILES; ++j) {
 			// se->pos should be adjusted since the reference is a selected region, but do not need to consider the RC of B, since read is aligned to forward of B
 //			fprintf(stderr, "relative start pos: %lu\n", sds[j]->se[me->indices[j][0]].pos - least[j]);
 			pp[j][n_read] = ll_align(
 						 &sds[j]->se[me->indices[j][0]], n_read,
-						 &fds[j]->reads[fs_index[j]], &mls, &show, sds[j]->se[me->indices[j][0]].pos - least[j], tmp_debug);
+						 &fds[j]->reads[fs_index[j]], &mls, &show, sds[j]->se[me->indices[j][0]].pos - least[j], debug_level); //, n_read == 955 ? DEBUG_III : debug_level);
 //						fprintf(stderr, "%s = %lf  ", sds[j]->se[me->indices[j][0]].name_s, pp[j][n_read]);
 			ll[j][n_read] = pp[j][n_read];
-			if (isnan(ll[j][n_read])) tmp_debug = DEBUG_II;
+			//if (isnan(ll[j][n_read])) tmp_debug = DEBUG_II;
 			if (max < pp[j][n_read])
 				max = pp[j][n_read];
 		}
@@ -1234,7 +1235,7 @@ int main(int argc, const char *argv[])
 	size_t *haplotypeB = calloc(region_len, sizeof *haplotypeB);
 	unsigned int n_segregatingA = 0, n_segregatingB = 0;
 	
-	debug_level = DEBUG_I;
+	//debug_level = DEBUG_II;
 	fprintf(stderr, "Start genotyping\n");
 	FILE *final_out = NULL;
 	if (opt.output_file) {
@@ -1244,7 +1245,7 @@ int main(int argc, const char *argv[])
 	//the reference index of A AND B should be adjusted according to the cigar string, this only genotype on the site that are not -/A or A/-
 	/* finally: march along reference positions and genotype */
 	for (size_t posA = start_pos[0]; posA < end_pos[0]; ++posA) {
-	//for (size_t posA = start_pos[0]; posA < start_pos[0] + 20; ++posA) {
+	//for (size_t posA = 115781262; posA < 115781263; ++posA) {
 		ref_entry *re = &rf_info->info[my_refs[0]];
 		size_t target_a = posA; 		/* 0-based, absolute position within aligned region of genome A */
 		size_t site = target_a - start_pos[0];	/* relative location */
@@ -1416,8 +1417,6 @@ debug_msg(debug_level > DEBUG_I, debug_level, "Read %s (%u) cigar %u%c (%u), rd_
 					 */
 					if (rf_idx + se->cig->ashes[j].len > target_b
 						&& rd_idxA[n_read] == (int) (rd_idx + target_b - rf_idx)) {
-						debug_msg(debug_level > DEBUG_I, debug_level, "[SUCCESS] Read %s (%u) covers target position %u in %u%c from (%zu-%zu) with rd_idx = %lu\n",
-							se->name_s, n_read, target_b, se->cig->ashes[j].len, cigar_char[se->cig->ashes[j].type], rf_idx, rf_idx + se->cig->ashes[j].len, rd_idx + target_b - rf_idx);
 						covers[n_read] = 1;
 						obs_rpos[n_cover] = (int) (rd_idx + target_b - rf_idx);
 						obs_nuc[n_cover] = get_nuc(se->read, XY_ENCODING, obs_rpos[n_cover]);
@@ -1426,6 +1425,8 @@ debug_msg(debug_level > DEBUG_I, debug_level, "Read %s (%u) cigar %u%c (%u), rd_
 						++num_nuc[obs_nuc[n_cover]];
 						obs_q[n_cover] = get_qual(se->qual, obs_rpos[n_cover]);
 						ref_base[1] = fds[1]->reads[fs_index[1] + rd_idx + target_b - least[1] + 1];
+						debug_msg(debug_level > DEBUG_I, debug_level, "[SUCCESS] Read %s (%u) covers target position %u in %u%c from (%zu-%zu) with nucleotide %c at rd_idx = %lu and pp[A]=%f\n",
+							se->name_s, n_read, target_b, se->cig->ashes[j].len, cigar_char[se->cig->ashes[j].type], rf_idx, rf_idx + se->cig->ashes[j].len, xy_to_char[obs_nuc[n_cover]], obs_rpos[n_cover], pp[0][n_read]);
 						++n_cover;
 						break;
 					} else if (rf_idx + se->cig->ashes[j].len > target_b) {
@@ -1436,7 +1437,7 @@ debug_msg(debug_level > DEBUG_I, debug_level, "Read %s (%u) cigar %u%c (%u), rd_
 					rd_idx += se->cig->ashes[j].len;
 				}
 			/* B is reverse complemented in alignment to A: reverse complement the sam alignment */
-			} else { 
+			} else {
 				rf_idx = se->pos - 1 + se->cig->length_rf - 1; // 0-based
 				if (rf_idx < target_b) {
 					n_read++;
@@ -1477,8 +1478,6 @@ debug_msg(debug_level > DEBUG_I, debug_level, "Read %s (%u) cigar %u%c (%u), rd_
 					 */
 					if (rf_idx - se->cig->ashes[j].len < target_b
 						&& rd_idxA[n_read] == (int) (rd_idx + rf_idx - target_b)) {
-						debug_msg(debug_level > DEBUG_I, debug_level, "Read %s (%u) covers target position %u in %u%c from (%zu-%zu) with rd_idx = %lu\n",
-							se->name_s, n_read, target_b, se->cig->ashes[j].len, cigar_char[se->cig->ashes[j].type], rf_idx, rf_idx + se->cig->ashes[j].len, rd_idx + rf_idx - target_b);
 						covers[n_read] = 1;
 						obs_rpos[n_cover] = (int) (rd_idx + rf_idx - target_b);
 						obs_nuc[n_cover] = get_nuc(se->read, XY_ENCODING, se->read->len - obs_rpos[n_cover] - 1);
@@ -1489,6 +1488,8 @@ debug_msg(debug_level > DEBUG_I, debug_level, "Read %s (%u) cigar %u%c (%u), rd_
 						++num_nuc[obs_nuc[n_cover]];
 						obs_q[n_cover] = get_qual(se->qual, se->read->len - obs_rpos[n_cover] - 1);
 						ref_base[1] = fds[1]->reads[fs_index[1] + rd_idx + target_b - least[1] + 1]; // need to reverse complement B
+						debug_msg(debug_level > DEBUG_I, debug_level, "[SUCCESS] Read %s (%u) covers target position %u in %u%c from (%zu-%zu) with nucleotide %c at rd_idx = %lu and pp[A]=%f\n",
+							se->name_s, n_read, target_b, se->cig->ashes[j].len, cigar_char[se->cig->ashes[j].type], rf_idx, rf_idx + se->cig->ashes[j].len, xy_to_char[obs_nuc[n_cover]], obs_rpos[n_cover], pp[0][n_read]);
 						++n_cover;
 						break;
 					} else if (rf_idx + se->cig->ashes[j].len > target_b) {
@@ -2459,10 +2460,10 @@ double ll_align(sam_entry *se, unsigned int rd_id, unsigned char *ref,
 	debug_msg(fxn_debug >= DEBUG_II || show, fxn_debug, "Read = %u, "
 		  "Name = %s, Flag = %u, Pos = %u, Align. len = %u, Cigar = ",
 		  rd_id, se->name_s, se->flag, se->pos, align_len);
-	if (fxn_debug >= DEBUG_II || show)
-		for (unsigned int i = 0; i < se->cig->n_ashes; ++i)
+	for (unsigned int i = 0; i < se->cig->n_ashes; ++i)
+		debug_call(fxn_debug >= DEBUG_II || show, fxn_debug,
 			fprintf(stderr, "%u%c", se->cig->ashes[i].len,
-				cigar_char[se->cig->ashes[i].type]);
+				cigar_char[se->cig->ashes[i].type]));
 	debug_msg_cont(fxn_debug >= DEBUG_II || show, fxn_debug, "\n");
 	debug_msg(fxn_debug >= DEBUG_II || show, fxn_debug, "Ref : ");
 
@@ -2471,10 +2472,9 @@ double ll_align(sam_entry *se, unsigned int rd_id, unsigned char *ref,
 
 		/* march through alignment; optimally output reference */
 		if (se->cig->ashes[i].type == CIGAR_DELETION) {
-			if (fxn_debug >= DEBUG_II || show)
+			if (fxn_debug >= DEBUG_II || show || (fxn_debug && fxn_debug <= global_debug_level))
 				for (size_t j = 0; j < se->cig->ashes[i].len; ++j) {
-					if (!reverse_complement && !display_after
-						&& (fxn_debug || show))
+					if (!reverse_complement && !display_after)
 						fprintf(stderr, "%c",
 							iupac_to_char[ref[rf_index + j]]);
 					else if (!display_qual && (fxn_debug || show))
@@ -2489,7 +2489,7 @@ double ll_align(sam_entry *se, unsigned int rd_id, unsigned char *ref,
 			rf_index += se->cig->ashes[i].len;
 			continue;
 		} else if (se->cig->ashes[i].type == CIGAR_SOFT_CLIP) {
-			if (fxn_debug >= DEBUG_II || show)
+			if (fxn_debug >= DEBUG_II || show || (fxn_debug && fxn_debug <= global_debug_level))
 				for (size_t j = 0; j < se->cig->ashes[i].len; ++j) {
 					if (!reverse_complement && !display_after)
 						fputc('.', stderr);
@@ -2499,7 +2499,7 @@ double ll_align(sam_entry *se, unsigned int rd_id, unsigned char *ref,
 			rd_index += se->cig->ashes[i].len;
 			continue;
 		} else if (se->cig->ashes[i].type == CIGAR_INSERTION) {
-			if (fxn_debug >= DEBUG_II || show)
+			if (fxn_debug >= DEBUG_II || show || (fxn_debug && fxn_debug <= global_debug_level))
 				for (size_t j = 0; j < se->cig->ashes[i].len; ++j) {
 					if (!reverse_complement && !display_after)
 						fputc('-', stderr);
@@ -2549,13 +2549,13 @@ double ll_align(sam_entry *se, unsigned int rd_id, unsigned char *ref,
 				+ MIN_ASCII_QUALITY_SCORE;
 			}
 			if (!reverse_complement && !display_after && guide_posts && !(++out % 10))
-				fprintf(stderr, "|");
+				debug_call(fxn_debug >= DEBUG_I || show, fxn_debug, fprintf(stderr, "|"));
 		}
 		rf_index += se->cig->ashes[i].len;
 		rd_index += se->cig->ashes[i].len;
 	}
 
-	if ((fxn_debug >= DEBUG_II || show) && reverse_complement) {
+	if ((fxn_debug >= DEBUG_II || show || (fxn_debug && fxn_debug <= global_debug_level)) && reverse_complement) {
 		for (size_t j = align_len; j > 0; --j) {
 			fputc(!align_display[j - 1] ? '-' :
 				  iupac_to_char[iupac_to_rc[
@@ -2575,7 +2575,7 @@ double ll_align(sam_entry *se, unsigned int rd_id, unsigned char *ref,
 			fprintf(stderr, "\n");
 		}
 	}
-	if (display_after && !reverse_complement) {
+	if (display_after && !reverse_complement && (fxn_debug >= DEBUG_II || show || (fxn_debug && fxn_debug <= global_debug_level))) {
 		for (size_t j = 0; j < align_len; ++j) {
 			fputc(!align_display[j] ? '-' :
 				  iupac_to_char[align_display[j]], stderr);
@@ -2584,7 +2584,7 @@ double ll_align(sam_entry *se, unsigned int rd_id, unsigned char *ref,
 		}
 		fprintf(stderr, "\n");
 	}
-	if (qual_display && !reverse_complement) {
+	if (qual_display && !reverse_complement && (fxn_debug >= DEBUG_II || show || (fxn_debug && fxn_debug <= global_debug_level))) {
 		debug_msg(fxn_debug >= DEBUG_II || show, fxn_debug, "Qual: ");
 		for (size_t j = 0; j < align_len; ++j) {
 			fputc(!qual_display[j] ? ' ' : qual_display[j], stderr);
@@ -2595,7 +2595,7 @@ double ll_align(sam_entry *se, unsigned int rd_id, unsigned char *ref,
 	}
 
 	/* optionally output read to show alignment */
-	if (fxn_debug >= DEBUG_II || show) {
+	if (fxn_debug >= DEBUG_II || show || (fxn_debug && fxn_debug <= global_debug_level)) {
 		align_index = 0;
 		debug_msg(fxn_debug >= DEBUG_II || show, fxn_debug, "Read: ");
 		rf_index = start_rf;
@@ -2677,7 +2677,7 @@ if (rf_index + se->cig->ashes[i].len > rf_pos2) {
 				rf_index += se->cig->ashes[i].len;
 			}
 		}
-		if (reverse_complement && (fxn_debug || show)) {
+		if (reverse_complement && (fxn_debug || show || (fxn_debug && fxn_debug <= global_debug_level))) {
 			for (size_t j = align_len; j > 0; --j) {
 				fprintf(stderr, "%c", !align_display[j - 1] ? '-' : align_display[j - 1] == 15 ? '.' : iupac_to_char[iupac_to_rc[align_display[j - 1]]]);
 				if (!((align_len - j + 1) % 10) && guide_posts)

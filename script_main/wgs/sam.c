@@ -976,3 +976,9 @@ int output_error_data(FILE *fp, sam_entry *se, unsigned char *ref, double lprob)
 	return NO_ERROR;
 } /* output_error_data */
 
+void print_cigar(FILE *file, sam_entry *se)
+{
+	for (unsigned int i = 0; i < se->cig->n_ashes; ++i)
+		fprintf(file, "%u%c", se->cig->ashes[i].len,
+			cigar_char[se->cig->ashes[i].type]);
+} /* print_cigar */

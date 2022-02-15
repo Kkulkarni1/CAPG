@@ -116,5 +116,7 @@ int fill_hash(sam *s, sam_hash *sh, unsigned int n_ref);
 /* output */
 int output_error_data(FILE *fp, sam_entry *se, unsigned char *ref, double lprob);
 void reverse_in_place(sam_entry *se);
+void print_cigar(FILE *file, sam_entry *se);
+
 
 #endif

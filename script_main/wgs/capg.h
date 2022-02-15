@@ -98,7 +98,6 @@ typedef struct mlogit_stuff {
 int read_ampliclust_results(FILE *fp, input *in);
 int make_input(input **in);
 void free_input(input *in);
-double ll_align(sam_entry *se, unsigned int i, unsigned char *ref, mlogit_stuff *vptr, unsigned char *show, size_t start_rf);
 int default_options(options *opt);
 int parse_options_capg(options *opt, int argc, const char **argv);
 nuc_state *read_param_file(char const *param_file);

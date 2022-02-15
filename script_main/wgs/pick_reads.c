@@ -559,7 +559,9 @@ int soft_clip_alignment(sam_entry *se, unsigned int fiveprime_sc,
 			unsigned int idx = 0;
 			int n_ashes = se->cig->ashes[0].type == CIGAR_SOFT_CLIP ? 0 : 1;
 
-debug_msg(fxn_debug >= DEBUG_I, fxn_debug, "Read %s to be soft-clip extended from %u to %u on left side\n", se->name_s, len, prime_sc);
+debug_msg(fxn_debug >= DEBUG_I, fxn_debug, "Read %s with cigar ", se->name_s);
+debug_call(fxn_debug >= DEBUG_I, fxn_debug, print_cigar(stderr, se));
+debug_msg_cont(fxn_debug >= DEBUG_I, fxn_debug, " to be soft-clip extended from %u to %u on left side\n", len, prime_sc);
 
 			for (idx = 1 - n_ashes; idx < se->cig->n_ashes; ++idx) {
 				/* soft-clip ashes that consume
@@ -590,6 +592,7 @@ debug_msg(fxn_debug >= DEBUG_I, fxn_debug, "Read %s to be soft-clip extended fro
 				/* soft-clipping something consuming reference, but not read */
 				} else if (se->cig->ashes[idx].type == CIGAR_DELETION
 					|| se->cig->ashes[idx].type == CIGAR_SKIP) {
+					--n_ashes;
 					se->pos += se->cig->ashes[idx].len;
 				} else if (se->cig->ashes[idx].type == CIGAR_SOFT_CLIP) {
 					return 1;
@@ -609,13 +612,19 @@ debug_msg(fxn_debug >= DEBUG_I, fxn_debug, "Read %s to be soft-clip extended fro
 				free(se->cig->ashes);
 				se->cig->ashes = new_ashes;
 				se->cig->n_ashes += n_ashes;
+				lidx += n_ashes;
 			}
 
+debug_msg(fxn_debug >= DEBUG_I, fxn_debug, "New cigar ");
+debug_call(fxn_debug >= DEBUG_I, fxn_debug, print_cigar(stderr, se));
+debug_msg_cont(fxn_debug >= DEBUG_I, fxn_debug, "\n");
 		} else if (direction && len < prime_sc) {
 			unsigned int idx = lidx;
 			int n_ashes = se->cig->ashes[lidx].type == CIGAR_SOFT_CLIP ? 0 : 1;
 
-debug_msg(fxn_debug >= DEBUG_I, fxn_debug, "Read %s to be soft-clip extended from %u to %u on right side\n", se->name_s, len, prime_sc);
+debug_msg(fxn_debug >= DEBUG_I, fxn_debug, "Read %s with cigar ", se->name_s);
+debug_call(fxn_debug >= DEBUG_I, fxn_debug, print_cigar(stderr, se));
+debug_msg_cont(fxn_debug >= DEBUG_I, fxn_debug, " to be soft-clip extended from %u to %u on right side\n", len, prime_sc);
 
 			for (idx = se->cig->n_ashes + n_ashes - 1; idx-- > 0; ) {
 				if (se->cig->ashes[idx].type == CIGAR_MATCH
@@ -633,6 +642,10 @@ debug_msg(fxn_debug >= DEBUG_I, fxn_debug, "Read %s to be soft-clip extended fro
 						if (se->cig->ashes[idx].type != CIGAR_INSERTION)
 							se->cig->length_rf -= se->cig->ashes[idx].len;
 					}
+				/* soft-clipping something consuming reference, but not read */
+				} else if (se->cig->ashes[idx].type == CIGAR_DELETION
+					|| se->cig->ashes[idx].type == CIGAR_SKIP) {
+					--n_ashes;
 				} else if (se->cig->ashes[idx].type == CIGAR_SOFT_CLIP) {
 					return 1;
 				}
@@ -651,7 +664,11 @@ debug_msg(fxn_debug >= DEBUG_I, fxn_debug, "Read %s to be soft-clip extended fro
 			if (n_ashes) {
 				free(se->cig->ashes);
 				se->cig->ashes = new_ashes;
+				lidx += n_ashes;
 			}
+debug_msg(fxn_debug >= DEBUG_I, fxn_debug, "New cigar ");
+debug_call(fxn_debug >= DEBUG_I, fxn_debug, print_cigar(stderr, se));
+debug_msg_cont(fxn_debug >= DEBUG_I, fxn_debug, "\n");
 		}
 	}
 

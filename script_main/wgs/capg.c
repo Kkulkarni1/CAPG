@@ -36,6 +36,7 @@
  */
 
 
+double ll_align(sam_entry *se, unsigned int i, unsigned char *ref, mlogit_stuff *vptr, unsigned char *show, size_t start_rf, int debug);
 int update_vcf(options *opt, int *fail[N_FILES], size_t *hpos[N_FILES]);
 uint64_t get_haplotype_id(sam_entry *se, size_t *haplotype, unsigned int n_segregating);
 int test_equal_homolog_coverage(merge_hash *mh, double **ll, char_t ref_base[N_FILES], char *covers, xy_t *obs_nuc, qual_t *obs_q, unsigned int *obs_rpos, int g_max[N_FILES], xy_t nuc1, xy_t nuc2, int debug_level, double pvals[N_FILES]);
@@ -927,6 +928,7 @@ int main(int argc, const char *argv[])
 	double A_expected_coverage = 0;
 	unsigned char show = opt.display_alignment;
 	
+	int tmp_debug = 0;
 	for (merge_hash *me = mh; me != NULL; me = me->hh.next) {
 		
 		if (me->exclude) {
@@ -942,9 +944,10 @@ int main(int argc, const char *argv[])
 //			fprintf(stderr, "relative start pos: %lu\n", sds[j]->se[me->indices[j][0]].pos - least[j]);
 			pp[j][n_read] = ll_align(
 						 &sds[j]->se[me->indices[j][0]], n_read,
-						 &fds[j]->reads[fs_index[j]], &mls, &show, sds[j]->se[me->indices[j][0]].pos - least[j]);
+						 &fds[j]->reads[fs_index[j]], &mls, &show, sds[j]->se[me->indices[j][0]].pos - least[j], tmp_debug);
 //						fprintf(stderr, "%s = %lf  ", sds[j]->se[me->indices[j][0]].name_s, pp[j][n_read]);
 			ll[j][n_read] = pp[j][n_read];
+			if (isnan(ll[j][n_read])) tmp_debug = DEBUG_II;
 			if (max < pp[j][n_read])
 				max = pp[j][n_read];
 		}
@@ -1026,14 +1029,16 @@ int main(int argc, const char *argv[])
 		debug_msg(1, debug_level, "mll: ");
 		fprint_doubles(stderr, mll, n_read, 6, 1);
 		fprintf(stderr, "%f %f %f %f %f %f %f\n", mll[(int)(n_read*0.025)], mll[(int)(n_read*0.05)], mll[(int)(n_read*0.10)], mll[(int)(n_read*0.5)], mll[(int)(n_read*0.9)], mll[(int)(n_read*.95)], mll[(int)(n_read*.975)]);
-	} else if (isfinite(opt.min_log_likelihood))
+	} else if (isfinite(opt.min_log_likelihood)) {
 		mmessage(INFO_MSG, NO_ERROR, "%zu reads fail to achieve minimum"
 			 " log likelihood %f.\n", n_addl_excluded,
 			 opt.min_log_likelihood);
+	}
 	
 	for (unsigned int j = 0; j < N_FILES; ++j) {
 		double *new_pp = realloc(pp[j], n_read * sizeof **pp);
 		double *new_ll = realloc(ll[j], n_read * sizeof **ll);
+
 		if (!new_pp || !new_ll)
 			return mmessage(ERROR_MSG, MEMORY_ALLOCATION,
 					"(reallocate) posterior probability (%zu).\n",
@@ -2355,10 +2360,12 @@ uint64_t get_haplotype_id(sam_entry *se, size_t *haplotype,
  * @param in_show	show alignments
  * @param start_rf	starting position of alignment relative to extracted 
  *			target regions from references
+ * @param in_debug	debugging
  * @return		log likelihood
  */
 double ll_align(sam_entry *se, unsigned int rd_id, unsigned char *ref,
-		mlogit_stuff *mls, unsigned char *in_show, size_t start_rf)
+		mlogit_stuff *mls, unsigned char *in_show, size_t start_rf,
+		int in_debug)
 {
 
 	size_t rf_index = start_rf;		/* starting reference position */
@@ -2414,7 +2421,7 @@ double ll_align(sam_entry *se, unsigned int rd_id, unsigned char *ref,
 
 	unsigned char show = *in_show;
 
-	int fxn_debug = ABSOLUTE_SILENCE;//DEBUG_II;//DEBUG_III;//DEBUG_II;//
+	int fxn_debug = in_debug;//ABSOLUTE_SILENCE;//DEBUG_II;//DEBUG_III;//DEBUG_II;//
 	/* control display during debugging */
 	int display_reverse_complement = 1;	/* show rc if so aligned */
 	int display_dot = 1;			/* display dot for match */
@@ -2451,7 +2458,7 @@ double ll_align(sam_entry *se, unsigned int rd_id, unsigned char *ref,
 
 	debug_msg(fxn_debug >= DEBUG_II || show, fxn_debug, "Read = %u, "
 		  "Name = %s, Flag = %u, Pos = %u, Align. len = %u, Cigar = ",
-		  rd_id, se->name, se->flag, se->pos, align_len);
+		  rd_id, se->name_s, se->flag, se->pos, align_len);
 	if (fxn_debug >= DEBUG_II || show)
 		for (unsigned int i = 0; i < se->cig->n_ashes; ++i)
 			fprintf(stderr, "%u%c", se->cig->ashes[i].len,

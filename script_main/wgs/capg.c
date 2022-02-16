@@ -70,7 +70,7 @@ int test_equal_homolog_coverage(merge_hash *mh, double **all,
 	double gamma[N_FILES] = {g_max[0]/2., g_max[1]/2.};
 	double eta = 0.5;	/* assumes N_FILES == 2 */
 	double new_gamma[N_FILES];
-	double new_eta;
+	double new_eta, gamma1, gamma2, eta_h1;
 	double lpi[2*N_FILES];
 	double ll1;
 	double ll = -INFINITY, pll;
@@ -166,6 +166,19 @@ int test_equal_homolog_coverage(merge_hash *mh, double **all,
 			gamma[1] = new_gamma[1] / total2;
 		//fprintf(stderr, "eta = %f, gamma1 = %f, gamma2 = %f, ll = %f, rel = %e\n", eta, gamma[0], gamma[1], ll, (pll - ll) / ll);
 	} while (iter++ < max_iter && (ll - pll) > -ll * epsilon);
+
+	if (g_max[0] == 1)
+		gamma1 = gamma[0];
+	else if (!g_max[0])
+		gamma1 = 1;
+	else
+		gamma1 = 0;
+	if (g_max[1] == 1)
+		gamma2 = gamma[1];
+	else if (!g_max[1])
+		gamma2 = 1;
+	else gamma2 = 0;
+	eta_h1 = eta;
 
 	ll1 = ll;
 
@@ -273,8 +286,8 @@ int test_equal_homolog_coverage(merge_hash *mh, double **all,
 	double lrt = 2 * (ll1 - ll);
 	pvals[j] = pchisq(lrt, 1, 0, 0);
 	debug_msg(debug_level > QUIET, debug_level,
-		"Equal coverage test: eta = %f; gamma1 = %f; gamma2 = %f; lrt = %f (%f %f); pval = %e\n",
-		eta, j && g_max[0] == 1 ? gamma[0] : g_max[0] / 2., !j && g_max[1] == 1 ? gamma[1] : g_max[1] / 2., 2 * (ll1 - ll), ll1, ll, pvals[j]);
+		"Equal coverage test: eta = %f, gamma1 = %f, gamma2 = %f vs. eta = %f, gamma1 = %f, gamma2 = %f; lrt = %f (%f %f); pval = %e\n",
+		eta_h1, gamma1, gamma2, eta, j && g_max[0] == 1 ? gamma[0] : g_max[0] / 2., !j && g_max[1] == 1 ? gamma[1] : g_max[1] / 2., 2 * (ll1 - ll), ll1, ll, pvals[j]);
 	}
 
 	return 0;
@@ -1245,7 +1258,7 @@ int main(int argc, const char *argv[])
 	//the reference index of A AND B should be adjusted according to the cigar string, this only genotype on the site that are not -/A or A/-
 	/* finally: march along reference positions and genotype */
 	for (size_t posA = start_pos[0]; posA < end_pos[0]; ++posA) {
-	//for (size_t posA = 115781262; posA < 115781263; ++posA) {
+	//for (size_t posA = 2882575; posA < 2882576; ++posA) {
 		ref_entry *re = &rf_info->info[my_refs[0]];
 		size_t target_a = posA; 		/* 0-based, absolute position within aligned region of genome A */
 		size_t site = target_a - start_pos[0];	/* relative location */
@@ -1699,7 +1712,7 @@ debug_msg(debug_level > DEBUG_I, debug_level, "Read %s (%u) cigar %u%c (%u), rd_
 		
 		if (karin_version) {/* to replace old version */
 			
-			double tmp1, tmp2;
+			double tmp1, tmp2, tmp1a, tmp1b, tmp2a, tmp2b;
 			double max = -INFINITY, den = 0;
 			/* consider each genotype at the current locus */
 			for (int g1 = 0; g1 <= 2; ++g1) {
@@ -1712,31 +1725,34 @@ debug_msg(debug_level > DEBUG_I, debug_level, "Read %s (%u) cigar %u%c (%u), rd_
 							continue;
 						if (covers[n_read]) {
 							mls.pos = obs_rpos[n_cover];
-							tmp1 = ll[0][n_read]
-							- sub_prob_given_q_with_encoding(
+							tmp1a = sub_prob_given_q_with_encoding(
 											 ref_base[0],			/* homozygous ref base */
-											 obs_nuc[n_cover], IUPAC_ENCODING, XY_ENCODING, obs_q[n_cover], 1, (void *)&mls)
-							+ sub_prob_given_q_with_encoding(
+											 obs_nuc[n_cover], IUPAC_ENCODING, XY_ENCODING, obs_q[n_cover], 1, (void *)&mls);
+							tmp1b = sub_prob_given_q_with_encoding(
 											 !g1 ? xy_to_iupac[nuc1]	/* new genotype */
 											 : g1 == 2 ? xy_to_iupac[nuc2]
 											 : xy_to_iupac[nuc1] | xy_to_iupac[nuc2],
 											 obs_nuc[n_cover], IUPAC_ENCODING, XY_ENCODING, obs_q[n_cover], 1, (void *)&mls);
+							tmp1 = ll[0][n_read] - tmp1a + tmp1b;
 							/* log likelihood of B alignment */
+							/* [FIXED, KSD 2/14/22: obs_nuc is already reverse complemented if appropriate]
 							xy_t tmp = obs_nuc[n_cover];
 							if (rf_info->info[my_refs[1]].strand_B) //RC if B is reversed
 								tmp = xy_to_rc[obs_nuc[n_cover]];
-							tmp2 = ll[1][n_read]
-							- sub_prob_given_q_with_encoding(
+							*/
+							tmp2a = sub_prob_given_q_with_encoding(
 											 ref_base[1],			/* homozygous ref base */
-											 tmp, IUPAC_ENCODING, XY_ENCODING, obs_q[n_cover], 1, (void *)&mls)
-							+ sub_prob_given_q_with_encoding(
+											 obs_nuc[n_cover], IUPAC_ENCODING, XY_ENCODING, obs_q[n_cover], 1, (void *)&mls);
+							tmp2b = sub_prob_given_q_with_encoding(
 											 !g2 ? xy_to_iupac[nuc1]	/* new genotype */
 											 : g2 == 2 ? xy_to_iupac[nuc2]
 											 : xy_to_iupac[nuc1] | xy_to_iupac[nuc2],
 											 obs_nuc[n_cover], IUPAC_ENCODING, XY_ENCODING, obs_q[n_cover], 1, (void *)&mls);
+							tmp2 = ll[1][n_read] - tmp2a + tmp2b;
 							
 							/* combine assuming uniform prior */
 							lprob[g1 * 3 + g2] += log(exp(tmp1) + exp(tmp2));
+							//fprintf(stderr, "Ref base (%c, %c) -> Genotype (%c%c %d,%d); Read %zu (%c,%d): %f (%f-%f) vs. %f (%f-%f) (%f)\n", iupac_to_char[ref_base[0]], iupac_to_char[ref_base[1]], xy_to_char[nuc1], xy_to_char[nuc2], g1, g2, n_cover, xy_to_char[obs_nuc[n_cover]], obs_q[n_cover], tmp1, tmp1b, tmp1a, tmp2, tmp2b, tmp2a, lprob[g1 * 3 + g2]);
 							++n_cover;
 						}
 						++n_read;

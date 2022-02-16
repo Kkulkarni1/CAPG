@@ -450,8 +450,8 @@ int fill_hash(sam *s, sam_hash *sh, unsigned int n_ref)
 
 	/* finish setting up the per reference indices */
 	if (!sh || sh->type & HASH_REFERENCE) {
-		size_t *stuff;
-		stuff = malloc(s->n_mapping * sizeof **s->ref_list);	/* [TODO] sam::n_mapping contains far more than \sum_i sam::n_per_ref[i] */
+		size_t *stuff = malloc(s->n_mapping * sizeof **s->ref_list);	/* [TODO] sam::n_mapping contains far more than \sum_i sam::n_per_ref[i] */
+
 		if (!stuff)
 			return mmessage(ERROR_MSG, MEMORY_ALLOCATION,
 							"sam::ref_list");
@@ -654,7 +654,7 @@ hash_sam (
 	unsigned int max_length,
 	double max_exp_err)
 {
-	int fxn_debug = ABSOLUTE_SILENCE;//DEBUG_II;//DEBUG_I;//
+	int fxn_debug = DEBUG_II;//DEBUG_I;//ABSOLUTE_SILENCE;//
 	size_t n_unmapped = 0;
 	size_t n_targeted_unmapped = 0;
 	size_t n_secondary = 0;
@@ -709,10 +709,10 @@ hash_sam (
 		if (drop_second && se->flag >> 11 & 1) {
 			se->exclude = 1;
 			if (se->which_ref == rindex) {
-				debug_msg_cont(fxn_debug >= DEBUG_I, fxn_debug, "remove %s b/c secondary alignment\n", se->name);
+				debug_msg_cont(fxn_debug >= DEBUG_I, fxn_debug, "remove %s secondary alignment to same reference\n", se->name);
 				++n_secondary;
 			} else {
-				debug_msg_cont(fxn_debug >= DEBUG_II, fxn_debug, "remove %s b/c secondary alignment to wrong reference\n", se->name);
+				debug_msg_cont(fxn_debug >= DEBUG_II, fxn_debug, "remove %s secondary alignment to wrong reference\n", se->name);
 			}
 			continue;
 		}
@@ -798,10 +798,10 @@ hash_sam (
 			if (mee > max_exp_err) {
 				se->exclude = 1;
 				if (se->which_ref == rindex) {
-					debug_msg_cont(fxn_debug >= DEBUG_I, fxn_debug, "remove %s b/c too many expected errors\n", se->name);
+					debug_msg_cont(fxn_debug >= DEBUG_I, fxn_debug, "remove %s alignment with too many expected errors\n", se->name);
 					++n_experr;
 				} else {
-					debug_msg_cont(fxn_debug >= DEBUG_II, fxn_debug, "remove %s b/c too many expected errors aligned to wrong reference\n", se->name);
+					debug_msg_cont(fxn_debug >= DEBUG_II, fxn_debug, "remove %s alignment to wrong reference with too many expected errors\n", se->name);
 				}
 				continue;
 			}
@@ -814,7 +814,7 @@ hash_sam (
 				if (se->which_ref == rindex)
 					debug_msg_cont(fxn_debug >= DEBUG_II, fxn_debug, "retain %s\n", se->name);
 				else
-					debug_msg_cont(fxn_debug >= DEBUG_I, fxn_debug, "remove %s for not aligning to desired reference\n", se->name);
+					debug_msg_cont(fxn_debug >= DEBUG_I, fxn_debug, "remove %s primary alignment to wrong reference\n", se->name);
 			}
 
 		if (hash_on & HASH_NAME) { // notice, consider reverse or forward strand

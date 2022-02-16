@@ -266,48 +266,34 @@ int pickreads(ref_info *ref_info, options_rf *opt, sam **sds)
 					continue;
 
 				char *ref_names[N_FILES] = {re->name_A, re->name_B};
-				size_t start_pos[N_FILES] = {re->start_A, re->start_B};	// 0 based, from chrom_name:start-end
-				size_t end_pos[N_FILES] = {re->end_A, re->end_B};	// 1-based
 //				printf("%s %s\n ", ref_names[j], &sds[j]->ref_names[rchar[j][se->ref]]);
 
 				/* this read maps to this reference csome */
 				if (!strcmp(&sds[j]->ref_names[rchar[j][se->ref]], ref_names[j])) {
-					size_t len_ref = end_pos[j] - start_pos[j];
+					size_t start_pos[N_FILES] = {re->start_A, re->start_B};	// 0 based, inclusive (from chrom_name:start-end)
+					size_t end_pos[N_FILES] = {re->end_A, re->end_B};	// 1-based, inclusive (0-based, exclusive)
 					size_t rf_index_s = se->pos - 1;
 					size_t rf_index_e = rf_index_s + cig->length_rf;
 
 //					printf("%zu %zu || %zu %zu\n", rf_index_s, rf_index_e, start_pos[j], end_pos[j]);
 
-					/* read shorter than reference */
-					if (cig->length_rf < len_ref) {
-						if ((rf_index_s >= start_pos[j] && rf_index_e <= end_pos[j]) ||		/* read contained within reference */
-						    (rf_index_s < start_pos[j] && rf_index_e >= start_pos[j]) ||	/* read starts before 5' end of reference */
-						    (rf_index_s < end_pos[j] && rf_index_e >= end_pos[j])) {		/* read ends after 3' end of reference */
-							size_t length = strlen(ref_names[j]) + strlen(opt->delim_len) + strlen(opt->delim_ref) + (int)(log10(end_pos[j]) + 1) + 1;
+					/* and it maps within the target region */
+					if ((rf_index_s >= start_pos[j] && rf_index_e <= end_pos[j]) ||		/* read contained within target */
+					    (rf_index_s <= start_pos[j] && rf_index_e > start_pos[j]) ||	/* read crosses 5' end of target */
+					    (rf_index_s < end_pos[j] && rf_index_e >= end_pos[j])) {		/* read crosses 3' end of target */
+						size_t length = strlen(ref_names[j]) + strlen(opt->delim_len) + strlen(opt->delim_ref) + (int)(log10(end_pos[j]) + 1) + 1;
 
-							if (start_pos[j] != 0)
-								length += (int)(log10(start_pos[j]) + 1);
-							else
-								length += 1;
-							se->ref_name = malloc(length);
-							sprintf(se->ref_name, "%s%s%zu%s%zu", ref_names[j], opt->delim_ref, start_pos[j], opt->delim_len, end_pos[j]);
-							se->which_ref = i;
-							found_ref = 1;
-//							debug_msg(fxn_debug >= DEBUG_I, fxn_debug, "REF_ID: %d REF_NAME: %s \n", se->which_ref, se->ref_name);
-							break;
-						}
-
-					/* read longer than reference and contains reference entirely */
-					} else if (rf_index_s <= start_pos[j] && rf_index_e >= end_pos[j]) {
-						size_t length = strlen(ref_names[j]) + strlen(opt->delim_len) + strlen(opt->delim_ref) + (int)(log10(start_pos[j]) + 1) + (int)(log10(end_pos[j]) + 1) + 1;
+						if (start_pos[j] != 0)
+							length += (int)(log10(start_pos[j]) + 1);
+						else
+							length += 1;
 						se->ref_name = malloc(length);
 						sprintf(se->ref_name, "%s%s%zu%s%zu", ref_names[j], opt->delim_ref, start_pos[j], opt->delim_len, end_pos[j]);
 						se->which_ref = i;
-//						debug_msg(fxn_debug >= DEBUG_I, fxn_debug, "REF_ID: %d REF_NAME: %s \n", se->which_ref, se->ref_name);
 						found_ref = 1;
+//						debug_msg(fxn_debug >= DEBUG_I, fxn_debug, "REF_ID: %d REF_NAME: %s \n", se->which_ref, se->ref_name);
 						break;
 					}
-					/* [QUESTION] I guess it does not happen often, but what about reads longer than reference that nevertheless overlap with the reference? */
 				}
 			}
 			if (!found_ref) {

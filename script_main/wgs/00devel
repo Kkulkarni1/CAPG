@@ -95,7 +95,8 @@ Observed   qualities (32): BBFFF/<FFFF#FFFFFFFFFF/FFFF<#<B#
 Genotype (34885419, 22446112, 3643, 2835): GG/AA (0.827278) [ 0.000000 0.000012 0.000000 0.136733 0.035782 0.000000 0.827278 0.000195 0.000000]+++
 
 
-- Failure of ET test?
+- Failure of ET test? No, this is right. I have improved the output.
+BEFORE UPDATES
 grep -B 13 -A 2 "Genotype (115161500," err_files/*/SRR8*61_188.err
 DEBUG [roshan.c::main(1472)]: Expected counts genome A: 0.000 0.000 6.641 0.487
 DEBUG [roshan.c::main(1474)]: Expected counts genome B: 0.000 0.000 7.359 0.513
@@ -104,9 +105,19 @@ Observed   qualities (15): FF<<FF<FFFFFFFF
 Genotype (115161500, 117563779, 1022, 1010): TG/TT (0.600626) [ 0.007581 0.383089 0.000099 0.600626 0.003488 0.000000 0.005117 0.000000 0.000000]***
 prob_heterozygoteA 0.604114, prob_heterozygoteB 0.386577
 DEBUG [roshan.c::test_equal_homolog_coverage( 274)]: Equal coverage test: eta = 0.082245; gamma1 = 0.500000; gamma2 = 0.000000; lrt = 0.902756 (-35.346596 -35.797974); pval = 3.420437e-01
+AFTER UPDATES
 
 - This must be wrong!
-err_files/SRR8361738/SRR8361738_257.err:Genotype (141434330, 143555173, 1350, 1348): TA/TT (1.000000) [ 0.000000 0.000000 0.000000 1.000000 0.000000 0.000000 0.000000 0.000000 0.000000]***
+BEFORE: err_files/SRR8361738/SRR8361738_257.err
+DEBUG [roshan.c::main(1472)]: Expected counts genome A: 27.000 0.000 4.976 0.000
+DEBUG [roshan.c::main(1474)]: Expected counts genome B: 0.000 0.000 34.024 0.000
+Observed nucleotides (66): TTTTATTATATATTAATATTTATTTAATATTTTTAAAATTTTTATTTAATATATTTTATAAATAAA
+Observed   qualities (66): J<JJ<JJJFFFJFFAJJJJJJJAJJJ<JJJJJJJJ-JJ-JFJJJJJJJJJJ7JJ-<-JJF<A<JFA
+...
+Genotype (141434330, 143555173, 1350, 1348): TA/TT (1.000000) [ 0.000000 0.000000 0.000000 1.000000 0.000000 0.000000 0.000000 0.000000 0.000000]***
+prob_heterozygoteA 1.000000, prob_heterozygoteB 0.000000
+DEBUG [roshan.c::test_equal_homolog_coverage( 274)]: Equal coverage test: eta = 0.567308; gamma1 = 0.500000; gamma2 = 0.000000; lrt = 7.809182 (-567.114381 -571.018972); pval = 5.198144e-03
+
 
 - Why is this so confident when not identifiable?
 err_files/SRR8361735/SRR8361735_233.err:Genotype (135638861, 137807958, 1441, 1429): CT/CT (0.999841) [ 0.000000 0.000000 0.000000 0.000001 0.999841 0.000158 0.000000 0.000000 0.000000]***

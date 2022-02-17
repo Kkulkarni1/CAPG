@@ -451,7 +451,7 @@ void output_selected_reads(const char *f, sam **sds, merge_hash *mh) {
 int match_soft_clipping(merge_hash *mh, unsigned int nalign, sam **sds,
 	unsigned int b_rc)
 {
-	int fxn_debug = DEBUG_I;//ABSOLUTE_SILENCE;//
+	int fxn_debug = ABSOLUTE_SILENCE;//DEBUG_I;//
 	size_t n_reads_excluded = 0;
 
 	debug_msg(fxn_debug >= DEBUG_I, fxn_debug, "match_soft_clipping()\n");
@@ -519,7 +519,7 @@ int match_soft_clipping(merge_hash *mh, unsigned int nalign, sam **sds,
 int soft_clip_alignment(sam_entry *se, unsigned int fiveprime_sc,
 					unsigned int threeprime_sc, int rc)
 {
-	int fxn_debug = DEBUG_I;//ABSOLUTE_SILENCE;//
+	int fxn_debug = ABSOLUTE_SILENCE;//DEBUG_I;//
 	unsigned int lidx = se->cig->n_ashes - 1;
 	ash *new_ashes = NULL;
 	unsigned int prime_sc = 0;

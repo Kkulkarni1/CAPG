@@ -826,7 +826,7 @@ int main(int argc, const char *argv[])
 
 		/* use this read to find extent of coverage */
 		for (unsigned int j = 0; j < N_FILES; ++j) {
-			sam_entry *se; = &sds[j]->se[me->indices[j][0]];
+			sam_entry *se = &sds[j]->se[me->indices[j][0]];
 			size_t rf_pos = se->pos - 1;
 
 			n_align += me->count[j];
@@ -1249,7 +1249,7 @@ int main(int argc, const char *argv[])
 	size_t *haplotypeB = calloc(region_len, sizeof *haplotypeB);
 	unsigned int n_segregatingA = 0, n_segregatingB = 0;
 	
-	debug_level = DEBUG_II;
+	//debug_level = DEBUG_II;
 	fprintf(stderr, "Start genotyping\n");
 	FILE *final_out = NULL;
 	if (opt.output_file) {
@@ -1258,8 +1258,8 @@ int main(int argc, const char *argv[])
 	}
 	//the reference index of A AND B should be adjusted according to the cigar string, this only genotype on the site that are not -/A or A/-
 	/* finally: march along reference positions and genotype */
-	//for (size_t posA = start_pos[0]; posA < end_pos[0]; ++posA) {
-	for (size_t posA = 141434329; posA < 141434330; ++posA) {
+	for (size_t posA = start_pos[0]; posA < end_pos[0]; ++posA) {
+	//for (size_t posA = 141434329; posA < 141434330; ++posA) {
 		ref_entry *re = &rf_info->info[my_refs[0]];
 		size_t target_a = posA; 		/* 0-based, absolute position within aligned region of genome A */
 		size_t site = target_a - start_pos[0];	/* relative location within aligned region of subgenome A */
@@ -1754,7 +1754,7 @@ debug_msg(debug_level > DEBUG_I, debug_level, "Read %s (%u) cigar %u%c (%u), rd_
 							
 							/* combine assuming uniform prior */
 							lprob[g1 * 3 + g2] += log(exp(tmp1) + exp(tmp2));
-							fprintf(stderr, "Ref base (%c, %c) -> Genotype (%c%c %d,%d); Read %zu (%c,%d): %f (%f-%f) vs. %f (%f-%f) (%f)\n", iupac_to_char[ref_base[0]], iupac_to_char[ref_base[1]], xy_to_char[nuc1], xy_to_char[nuc2], g1, g2, n_cover, xy_to_char[obs_nuc[n_cover]], obs_q[n_cover], tmp1, tmp1b, tmp1a, tmp2, tmp2b, tmp2a, lprob[g1 * 3 + g2]);
+							//fprintf(stderr, "Ref base (%c, %c) -> Genotype (%c%c %d,%d); Read %zu (%c,%d): %f (%f-%f) vs. %f (%f-%f) (%f)\n", iupac_to_char[ref_base[0]], iupac_to_char[ref_base[1]], xy_to_char[nuc1], xy_to_char[nuc2], g1, g2, n_cover, xy_to_char[obs_nuc[n_cover]], obs_q[n_cover], tmp1, tmp1b, tmp1a, tmp2, tmp2b, tmp2a, lprob[g1 * 3 + g2]);
 							++n_cover;
 						}
 						++n_read;

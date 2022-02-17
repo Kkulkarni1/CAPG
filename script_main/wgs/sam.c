@@ -654,7 +654,7 @@ hash_sam (
 	unsigned int max_length,
 	double max_exp_err)
 {
-	int fxn_debug = DEBUG_II;//DEBUG_I;//ABSOLUTE_SILENCE;//
+	int fxn_debug = ABSOLUTE_SILENCE;//DEBUG_II;//DEBUG_I;//
 	size_t n_unmapped = 0;
 	size_t n_targeted_unmapped = 0;
 	size_t n_secondary = 0;

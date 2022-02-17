@@ -107,7 +107,11 @@ prob_heterozygoteA 0.604114, prob_heterozygoteB 0.386577
 DEBUG [roshan.c::test_equal_homolog_coverage( 274)]: Equal coverage test: eta = 0.082245; gamma1 = 0.500000; gamma2 = 0.000000; lrt = 0.902756 (-35.346596 -35.797974); pval = 3.420437e-01
 AFTER UPDATES
 
-- This must be wrong!
+- [RESOLVED] This must be wrong! It is not wrong.
+There is overwhelming evidence that the genotype is AA/TT when you look at the alignments, but it is easy to miss an upstream mismatch between the subgenomes that is NOT a homoeologous SNP. Thus, all the reads match subgenome A reference at this upstream site. Reads of B subgenome that do not traverse any of the downstream true homologous sites are BETTER EXPLAINED by the A genome reference because of this upstream mismatch with the B reference: the increase in log likelihood in hypothesizing genotype AT/TT instead of AA/TT is about 10 for these reads. Meanwhile the A genome reads that traverse the downstream homologous sites are better explained by AA/TT, but AT/TT explains them pretty well too: the increase in log likelihood for them is only about 0.7. It all comes down to the balance between these two types of reads, and in this case the B subgenome reads looking to avoid that mismatch win.
+
+Is it fixable? Well, I notice that the upstream site is correctly genotyped. I could imagine a scenario where we correct the reference genome when the current reads are in strong disagreement. However, this is a rather involved solution, so unless we can think of something easier, I guess I'll hope that it is not a common problem. It does demonstrate our dependence on good references but also how nearby allelic SNPs can interfere with genotyping. Fortunately, if allelic SNPs are few and far between and most reference mismatches are homoeologous, then we're good. I think the former is true; I'm less certain about the latter. BTW, GATK does not have a problem here and it also explains why simulation did not raise this issue.
+
 BEFORE: err_files/SRR8361738/SRR8361738_257.err
 DEBUG [roshan.c::main(1472)]: Expected counts genome A: 27.000 0.000 4.976 0.000
 DEBUG [roshan.c::main(1474)]: Expected counts genome B: 0.000 0.000 34.024 0.000
@@ -117,12 +121,36 @@ Observed   qualities (66): J<JJ<JJJFFFJFFAJJJJJJJAJJJ<JJJJJJJJ-JJ-JFJJJJJJJJJJ7J
 Genotype (141434330, 143555173, 1350, 1348): TA/TT (1.000000) [ 0.000000 0.000000 0.000000 1.000000 0.000000 0.000000 0.000000 0.000000 0.000000]***
 prob_heterozygoteA 1.000000, prob_heterozygoteB 0.000000
 DEBUG [roshan.c::test_equal_homolog_coverage( 274)]: Equal coverage test: eta = 0.567308; gamma1 = 0.500000; gamma2 = 0.000000; lrt = 7.809182 (-567.114381 -571.018972); pval = 5.198144e-03
+AFTER: notice we add two more reads covering A subgenome, yet it is still not enough to counterbalance the bad signal coming from subgenome B
+INFO [capg.c::main(1532)]: Expected counts genome A:  29.000 0.000 4.976 0.000
+INFO [capg.c::main(1534)]: Expected counts genome B:  0.000 0.000 34.024 0.000
+Observed nucleotides (68): TTTTATTATATATTAATATTTATATTAATATTTTTAAAATTTTTATATTAATATATTTTATAAATAAA
+Observed   qualities (68): J<JJ<JJJFFFJFFAJJJJJJJA-JJJ<JJJJJJJJ-JJ-JFJJJJ7JJJJJJ7JJ-<-JJF<A<JFA
+...
+Genotype (141434330, 143555173, 1350, 1348): TA/TT (1.000000) [ 0.000000 0.000000 0.000000 1.000000 0.000000 0.000000 0.000000 0.000000 0.000000]***
+prob_heterozygoteA 1.000000, prob_heterozygoteB 0.000000
+INFO [capg.c::test_equal_homolog_coverage( 288)]: Equal coverage test (subgenome 0): eta = 0.573818, gamma1 = 0.257149, gamma2 = 1.000000 vs. eta = 0.580630, gamma1 = 0.500000, gamma2 = 0.000000; lrt = 9.278056 (-613.737365 -618.376393); pval = 2.319155e-03
 
 
-- Why is this so confident when not identifiable?
+- [RESOLVED] Why is this so confident when not identifiable? It was the alignment bug.
 err_files/SRR8361735/SRR8361735_233.err:Genotype (135638861, 137807958, 1441, 1429): CT/CT (0.999841) [ 0.000000 0.000000 0.000000 0.000001 0.999841 0.000158 0.000000 0.000000 0.000000]***
+BEFORE
+DEBUG [roshan.c::main(1472)]: Expected counts genome A: 0.000 30.996 0.159 0.000
+DEBUG [roshan.c::main(1474)]: Expected counts genome B: 0.000 0.004 27.841 0.000
+Observed nucleotides (59): TCCCTTTCCCTTTTCCCCTCTTTTCTCTTTCCTCCCCCCCCCCTTTCCTTTCTCCCTTT
+Observed   qualities (59): A<JFJJJJFF-JJJJJJJJJJJFJJJJAJJJJJJJJJJJJJJJJFJJJJJJJJJ7JAFJ
+Genotype (135638861, 137807958, 1441, 1429): CT/CT (0.999841) [ 0.000000 0.000000 0.000000 0.000001 0.999841 0.000158 0.000000 0.000000 0.000000]***
+prob_heterozygoteA 1.000000, prob_heterozygoteB 0.999841
+DEBUG [roshan.c::test_equal_homolog_coverage( 274)]: Equal coverage test: eta = 0.852770; gamma1 = 0.500000; gamma2 = 0.001817; lrt = 3.105931 (-225.412386 -226.965352); pval = 7.800760e-02
+DEBUG [roshan.c::test_equal_homolog_coverage( 274)]: Equal coverage test: eta = 0.833855; gamma1 = 0.563908; gamma2 = 0.500000; lrt = 3.919430 (-225.412386 -227.372101); pval = 4.773107e-02
+AFTER: SRR8361735
+INFO [capg.c::main(1531)]: Expected counts genome A:  0.000 37.974 0.024 0.000
+INFO [capg.c::main(1533)]: Expected counts genome B:  0.000 0.026 35.976 0.000
+Observed nucleotides (74): TCTCCTCCCTTTCCCTTTTCCCCCTCTTTTCTCTTTCCTCCCCCCCCCCTTTCCTTTTTCTCCCTTTCCTTCTT
+Observed   qualities (74): AAAFFA<JFJJJJFF-JJJ-JJJJJJJJFJJJJAJJJJJJJJJJJJJJJJFJJJFJJJJJJJ7JAFJJJJFAFA
+Genotype (135638861, 137807958, 1441, 1429): CC/TT (0.992194) [ 0.000000 0.000022 0.992194 0.000000 0.007783 0.000002 0.000000 0.000000 0.000000]+++
 
-- Why are the heterozygote calls so confident? There are linking reads and totally ambiguous reads!
+- [RESOLVED] Why are the heterozygote calls so confident? There are linking reads and totally ambiguous reads!
 err_files/SRR4124062/SRR4124062_398.err:Genotype (2881470, 4200087, 3313, 3328): CC/AA (0.643633) [ 0.000000 0.000000 0.000000 0.350238 0.004880 0.000000 0.643633 0.001248 0.000000]+++
 err_files/SRR4124066/SRR4124066_398.err:Genotype (2881470, 4200087, 3313, 3328): AC/AA (0.988892) [ 0.000000 0.000000 0.000000 0.988892 0.008640 0.000000 0.002461 0.000008 0.000000]***
 err_files/SRR4124068/SRR4124068_398.err:Genotype (2881470, 4200087, 3313, 3328): CC/AA (0.827860) [ 0.000000 0.155714 0.827860 0.000000 0.003302 0.013124 0.000000 0.000000 0.000000]+++
@@ -163,7 +191,7 @@ Observed nucleotides (24): CAAACAAACAAAACCACCCAAAAA
 Observed   qualities (24): #B#F/BBFF<<<FFF7FFF/BB7#
 Genotype (2881470, 4200087, 3313, 3328): CC/AA (0.968588) [ 0.000000 0.000000 0.000000 0.031314 0.000015 0.000000 0.968588 0.000083 0.000000]+++
 
-- Followup question: There are far fewer heterozygous calls now, but still tens of them. Why the strong support for heterozygote here? It is because there is a T which is substantially better explained by at least one T allele in the genotype. All other reads can be explained by both homozygous and heterozygous genotypes. Why the preference for GT in subgenome B? Because subgenome A coverage is higher, and thus all those reads cumulatively are not well-explained by genotype GT/GG. Furthermore the single T read does not traverse a subgenomic mismatch, so it is equally well-explained by either GG/GT or GT/GG.  How could we improve this? A more sophisticated error model. Quality score recalibration. Accounting for PCR errors (high quality scores with errors), as the evidence is even strong if T is paired with QS F, for example. Or maybe not at all. It is caught by the equal homologous coverage test at level 0.05.
+- Followup question: There are far fewer heterozygous calls now, but still tens of them. Why the strong support for heterozygote here? It is because there is a T which is substantially better explained by hypothesizing at least one T allele in the genotype. All other reads can be explained almost equally well by homozygous and heterozygous genotypes. Why the preference for GT in subgenome B? Because subgenome A coverage is higher, and thus all those reads cumulatively are not well-explained by genotype GT/GG. Furthermore the single T read does not traverse a subgenomic mismatch, so it is equally well-explained by either GG/GT or GT/GG.  How could we improve this? A more sophisticated error model. Quality score recalibration. Accounting for PCR errors (high quality scores with errors), as the evidence is even strong if T is paired with QS F, for example. Or maybe not at all. It is caught by the equal homologous coverage test at level 0.05.
 Also, this particular case will not end up in the dataset we use because subgenome B coverage is < 8. A combination of substantial coverage and equal homologous coverage test should catch most of these freak or PCR errors.
 Genotype: SRR8737061
 DEBUG [capg.c::main(1517)]: Expected counts genome A: 0.000 0.000 0.500 14.000

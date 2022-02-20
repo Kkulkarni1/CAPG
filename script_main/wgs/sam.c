@@ -175,17 +175,19 @@ int read_bam(gzFile fp, sam **s_in)
 	if (gzseek(fp, cpos, SEEK_SET) < 0)
 		return mmessage(ERROR_MSG, FILE_FORMAT_ERROR, "gzseek()");
 	++rchar;
-	s->ref_names = malloc(rchar * sizeof *s->ref_names);
+	s->rname_ptr = malloc(rchar * sizeof(*s->rname_ptr));
+	s->ref_names = malloc(s->n_ref * sizeof(*s->ref_names));
 	rchar = 0;
 	for (uint32_t i = 0; i < s->n_ref; ++i) {
 		if (gzread(fp, &i32, sizeof(i32)) != sizeof(i32))
 			return mmessage(ERROR_MSG, FILE_FORMAT_ERROR, "l_name");
 		fprintf(stderr, "Going to read reference name %u of size %u\n", i, i32);
-		if (gzread(fp, &s->ref_names[rchar], i32) != i32)
+		if (gzread(fp, &s->rname_ptr[rchar], i32) != i32)
 			return mmessage(ERROR_MSG, FILE_FORMAT_ERROR, "name");
 		if (gzseek(fp, sizeof(i32), SEEK_CUR) < 0)/* ignore l_ref */
 			return mmessage(ERROR_MSG, FILE_FORMAT_ERROR, "name");
-		fprintf(stderr, "Read reference %.*s\n", i32 - 1, &s->ref_names[rchar]);
+		s->ref_names[i] = &s->rname_ptr[rchar];
+		fprintf(stderr, "Read reference %.*s\n", i32 - 1, s->ref_names[i]);
 		rchar += i32 - 1;
 	}
 
@@ -219,13 +221,15 @@ exit(0);
 /**
  * Read and parse a sam file.
  *
- * @param fp	file pointer
- * @param s_in	sam object to allocate and fill
+ * @param fp			file pointer
+ * @param s_in			sam object to allocate and fill
+ * @param append_strand_char	append mapping strand char to distinguish forward/reverse read
+ * @param progress_monitor	progress monitor to stderr
  * @return	error status
  */
-int read_sam(FILE *fp, sam **s_in)
+int read_sam(FILE *fp, sam **s_in, unsigned char append_strand_char, unsigned char progress_monitor)
 {
-	int fxn_debug = ABSOLUTE_SILENCE;//DEBUG_I;//
+	int fxn_debug = ABSOLUTE_SILENCE;//append_strand_char ? ABSOLUTE_SILENCE : DEBUG_I;//ABSOLUTE_SILENCE;//
 	char c, c1, c2;
 	unsigned int i = 0;
 	size_t nchar = 0;
@@ -238,6 +242,11 @@ int read_sam(FILE *fp, sam **s_in)
 		return mmessage(ERROR_MSG, MEMORY_ALLOCATION, "sam");
 	s = *s_in;
 
+	s->ref_list = NULL;
+	s->n_per_ref = NULL;
+	s->se = NULL;
+	s->rname_ptr = NULL;
+	s->ref_names = NULL;
 	s->n_se = 0;
 	s->n_ref = 0;
 
@@ -263,11 +272,11 @@ int read_sam(FILE *fp, sam **s_in)
 	ungetc(c, fp);
 	while (!feof(fp)) {
 		++s->n_se;
-		if (!(s->n_se % 1000))
-			fprintf(stderr, ".");
+		//if (!(s->n_se % 1000))
+		//	fprintf(stderr, ".");
 		while ((c = fgetc(fp)) != '\t' && c != EOF)	/* name */
 			++nchar;
-		++nchar;	/* null character */
+		nchar += 1 + append_strand_char;	/* null character & +/- for strand */
 		while ((c = fgetc(fp)) != '\t' && c != EOF);	/* flag */
 		while ((c = fgetc(fp)) != '\t' && c != EOF);	/* ref */
 		while ((c = fgetc(fp)) != '\t' && c != EOF);	/* pos */
@@ -280,7 +289,7 @@ int read_sam(FILE *fp, sam **s_in)
 			++schar;
 		while ((c = fgetc(fp)) != '\n' && c != EOF);
 	}
-	fprintf(stderr, "\n");
+	//fprintf(stderr, "\n");
 	debug_msg(fxn_debug >= DEBUG_I, fxn_debug, "Number of entries: %zu\n",
 								s->n_se);
 	debug_msg(fxn_debug >= DEBUG_I, fxn_debug, "Name chars: %zu\n", nchar);
@@ -288,7 +297,8 @@ int read_sam(FILE *fp, sam **s_in)
 								schar);
 	rewind(fp);
 
-	s->ref_names = malloc(rchar * sizeof *s->ref_names);
+	s->rname_ptr = malloc(rchar * sizeof(*s->rname_ptr));
+	s->ref_names = malloc(s->n_ref * sizeof(*s->ref_names));
 	rchar = 0;
 	s->n_ref = 0;
 	unsigned int max_ref = 0;
@@ -297,15 +307,16 @@ int read_sam(FILE *fp, sam **s_in)
 		c2 = fgetc(fp);
 		if (c1 == 'S' && c2 == 'Q') {	/* ref sequence */
 			while ((c = fgetc(fp)) != ':' && c != EOF);
-			if (fscanf(fp, "%s", &s->ref_names[rchar]) != 1)
+			if (fscanf(fp, "%s", &s->rname_ptr[rchar]) != 1)
 				return mmessage(ERROR_MSG, FILE_FORMAT_ERROR,
 							"invalid @SQ format");
 			debug_msg(fxn_debug >= DEBUG_I, fxn_debug,
-				"Read reference: %s\n", &s->ref_names[rchar]);
-			if (max_ref < strlen(&s->ref_names[rchar]))
-				max_ref = strlen(&s->ref_names[rchar]);
-			++s->n_ref;
-			rchar += strlen(&s->ref_names[rchar]) + 1;
+				"Read reference: %s\n", &s->rname_ptr[rchar]);
+			if (max_ref < strlen(&s->rname_ptr[rchar]))
+				max_ref = strlen(&s->rname_ptr[rchar]);
+			s->ref_names[s->n_ref] = &s->rname_ptr[rchar];
+			rchar += strlen(s->ref_names[s->n_ref]) + 1;
+			s->n_ref++;
 			while ((c = fgetc(fp)) != '\n' && c != EOF);
 		} else {
 			while ((c = fgetc(fp)) != '\n' && c != EOF);
@@ -314,22 +325,24 @@ int read_sam(FILE *fp, sam **s_in)
 
 	data_t *sdata = sequence_alloc(schar, nuc_sequence_opt(XY_ENCODING));
 	data_t *qdata = sequence_alloc(schar, &_qual_sequence_opt);
-	char *cdata = malloc(nchar * sizeof *cdata);
-	char *ref_name = malloc((max_ref + 1) * sizeof *ref_name);
-	sam_entry *se = malloc(s->n_se * sizeof *se);
-	sequence *seqs = malloc(2 * s->n_se * sizeof *seqs);
+	char *cdata = malloc(nchar * sizeof(*cdata));
+	char *ref_name = malloc((max_ref + 1) * sizeof(*ref_name));
+	sam_entry *se = malloc(s->n_se * sizeof(*se));
+	sequence *seqs = malloc(2 * s->n_se * sizeof(*seqs));
 	nchar = schar = qchar = 0;
 	s->n_se = 0;
 	s->n_mapping = 0;
 	size_t j = 0;
 	while (!feof(fp)) {
+		if (progress_monitor && !(s->n_se % 1000))
+			fprintf(stderr, ".");
 		ungetc(c, fp);
 		/* read name */
 		se[s->n_se].name = &cdata[nchar];
 		if (fscanf(fp, "%s", se[s->n_se].name) != 1)
 			return mmessage(ERROR_MSG, FILE_FORMAT_ERROR,
 						"failure to read name");
-		nchar += strlen(se[s->n_se].name) + 1;
+		nchar += strlen(se[s->n_se].name) + 1 + append_strand_char;/* strand indicator */
 		debug_msg(fxn_debug >= DEBUG_I, fxn_debug,
 			"Read name: %s\n", se[s->n_se].name);
 
@@ -340,21 +353,25 @@ int read_sam(FILE *fp, sam **s_in)
 		debug_msg(fxn_debug >= DEBUG_I, fxn_debug,
 				"Read flag: %u\n", se[s->n_se].flag);
 
+		if (append_strand_char && se[s->n_se].flag & 16UL)
+			strcat(se[s->n_se].name, "-");
+		else if (append_strand_char)
+			strcat(se[s->n_se].name, "+");
+
 		/* reference name */
 		if (fscanf(fp, "%s", ref_name) != 1)
 			return mmessage(ERROR_MSG, FILE_FORMAT_ERROR,
 					"failure to read reference");
 		debug_msg(fxn_debug >= DEBUG_I, fxn_debug,
 				"Read reference: %s\n", ref_name);
-		if (!(se[s->n_se].flag >> 2 & 1L)) {	/* mapped */
+		if (!(se[s->n_se].flag >> 2 & 1U)) {	/* mapped */
 			++s->n_mapping;
 			rchar = 0;
 			for (unsigned int i = 0; i < s->n_ref; ++i) {
-				if (!strcmp(ref_name, &s->ref_names[rchar])) {
+				if (!strcmp(ref_name, s->ref_names[i])) {
 					se[s->n_se].ref = i;
 					break;
 				}
-				rchar += strlen(&s->ref_names[rchar]) + 1;
 			}
 		}
 
@@ -424,6 +441,8 @@ int read_sam(FILE *fp, sam **s_in)
 
 		++s->n_se;
 	}
+	if (progress_monitor)
+		fprintf(stderr, "\n");
 	s->se = se;
 	return NO_ERROR;
 }/* read_sam */
@@ -440,7 +459,7 @@ int read_sam(FILE *fp, sam **s_in)
  *
  * @param s	pointer to sam object
  * @param sh	pointer to sam hash (see uthash.h)
- * @param n_ref		no. of total references
+ * @param n_ref	no. of total references
  * @return	error status
  */
 //NOTICE:change se.ref to re.which_ref for the targeted location
@@ -450,7 +469,13 @@ int fill_hash(sam *s, sam_hash *sh, unsigned int n_ref)
 
 	/* finish setting up the per reference indices */
 	if (!sh || sh->type & HASH_REFERENCE) {
-		size_t *stuff = malloc(s->n_mapping * sizeof **s->ref_list);	/* [TODO] sam::n_mapping contains far more than \sum_i sam::n_per_ref[i] */
+		size_t *stuff = NULL;
+		size_t nsize = 0;
+
+		for (size_t i = 0; i < n_ref; ++i)
+			nsize += s->n_per_ref[i];
+
+		stuff = malloc(nsize * sizeof(**s->ref_list));
 
 		if (!stuff)
 			return mmessage(ERROR_MSG, MEMORY_ALLOCATION,
@@ -508,13 +533,13 @@ int fill_hash(sam *s, sam_hash *sh, unsigned int n_ref)
 /**
  * Combine reads appearing in different sam files by name.  For example, for
  * Roshan's code, this function is used to combine homeologous pairs from the A
- * and B alignments into single hash.  This function can also filter reads by
- * various criteria, such as length or expected number of errors.
+ * and B alignments into single hash.
  *
  * @param mh		new hash
  * @param nfiles	number of files to hash
  * @param sds		sam list
- * @param rindex	desired reference index in sam file
+ * @param rindex	optional, only hash reads previously hashed to this
+ *			reference via previous HASH_REFERENCE call to hash_sam()
  * @return		number of reads hashed
  */
 size_t hash_merge(merge_hash **mh, unsigned int nfiles, sam **sds, size_t *rindex)
@@ -524,27 +549,31 @@ size_t hash_merge(merge_hash **mh, unsigned int nfiles, sam **sds, size_t *rinde
 	size_t hash_size = 0;
 
 	for (unsigned int j = 0; j < nfiles; ++j) {
+		size_t n_reads = rindex ? sds[j]->n_per_ref[rindex[j]]
+			: sds[j]->n_se;
 
-		for (size_t i = 0; i < sds[j]->n_per_ref[rindex[j]]; ++i) {
-			se = &sds[j]->se[sds[j]->ref_list[rindex[j]][i]];
+		for (size_t i = 0; i < n_reads; ++i) {
+			se = rindex
+				? &sds[j]->se[sds[j]->ref_list[rindex[j]][i]]
+				: &sds[j]->se[i];
 
 			if (se->exclude)
 				continue;
 			
-			HASH_FIND(hh, *mh, se->name_s, strlen(se->name_s)
-						* sizeof *se->name_s, entry);
+			HASH_FIND(hh, *mh, se->name, strlen(se->name)
+						* sizeof(*se->name), entry);
 			
 			if (!entry) {
-				entry = malloc(sizeof *entry);
+				entry = malloc(sizeof(*entry));
 				entry->count = calloc(nfiles,
-							sizeof *entry->count);
+							sizeof(*entry->count));
 				entry->count[j] = 1;
 				entry->indices = calloc(nfiles,
-							sizeof *entry->indices);
+							sizeof(*entry->indices));
 				entry->nfiles = 1;
 				entry->exclude = 0;
-				HASH_ADD_KEYPTR(hh, *mh, se->name_s,
-					strlen(se->name_s) * sizeof *se->name_s,
+				HASH_ADD_KEYPTR(hh, *mh, se->name,
+					strlen(se->name) * sizeof(*se->name),
 									entry);
 				++hash_size;
 			} else {
@@ -563,8 +592,8 @@ size_t hash_merge(merge_hash **mh, unsigned int nfiles, sam **sds, size_t *rinde
 			if (se->exclude)
 				continue;
 
-			HASH_FIND(hh, *mh, se->name_s, strlen(se->name_s)
-						* sizeof *se->name_s, entry);
+			HASH_FIND(hh, *mh, se->name, strlen(se->name)
+						* sizeof(*se->name), entry);
 			
 			if (!entry->indices[j]) {
 				entry->indices[j] = malloc(entry->count[j]
@@ -625,8 +654,7 @@ void reverse_in_place(sam_entry *se) {
  *	HASH_READ: hash reads by the read sequence.
  *	HASH_NAME: hash reads by read name.
  *
- * @param rindex	index of desired reference
- * @param n_ref		no. of total references
+ * @param nref		optional number of references in external reference list
  * ===FILTERS===
  * [TODO] Move these filters to read_sam, although read_sam does not do much
  * [TODO] interpretation.  Or drop them from memory, but that is not so easy.
@@ -644,8 +672,7 @@ hash_sam (
 	sam *s,
 	sam_hash **sh_in,
 	int hash_on,
-	size_t rindex,
-	unsigned int n_ref,
+	size_t n_ref,
 	unsigned char drop_unmapped,
 	unsigned char drop_second,
 	unsigned int drop_sc,
@@ -656,7 +683,6 @@ hash_sam (
 {
 	int fxn_debug = ABSOLUTE_SILENCE;//DEBUG_II;//DEBUG_I;//
 	size_t n_unmapped = 0;
-	size_t n_targeted_unmapped = 0;
 	size_t n_secondary = 0;
 	size_t n_min_length = 0;
 	size_t n_max_length = 0;
@@ -669,17 +695,20 @@ hash_sam (
 
 	s->hash_length = 0;
 
-	/* prepare to record indices of mapped reads under each reference */
+	/* if an external reference list has not been set up
+	 * prepare to record indices of mapped reads under each reference
+	 */
 	if (hash_on & HASH_REFERENCE) {
-		s->ref_list = malloc(n_ref * sizeof *s->ref_list);
+		s->ref_list = malloc((n_ref || s->n_ref) * sizeof *s->ref_list);
 		if (!s->ref_list)
 			return mmessage(ERROR_MSG, MEMORY_ALLOCATION,
 							"sam::ref_list");
-		s->n_per_ref = malloc(n_ref * sizeof *s->n_per_ref);
+		s->n_per_ref = malloc((n_ref || s->n_ref)
+							* sizeof *s->n_per_ref);
 		if (!s->n_per_ref)
 			return mmessage(ERROR_MSG, MEMORY_ALLOCATION,
 							"sam::n_per_ref");
-		for (size_t i = 0; i < n_ref; ++i)
+		for (size_t i = 0; i < (n_ref || s->n_ref); ++i)
 			s->n_per_ref[i] = 0;
 	}
 
@@ -688,14 +717,9 @@ hash_sam (
         
 		/* KSD, TODO Repace with earlier check on previously set exclude. */
 		/* discard targeted unmapped */
-		if (se->exclude == 1) {
-			++n_targeted_unmapped;
+		if (se->exclude == 1)
 			continue;
-		}
         
-		/* KSD,TODO With change, exclude may be set, so check first and skip. */
-		se->exclude = 0;
-
 		debug_msg(fxn_debug >= DEBUG_II, fxn_debug, "%zu: ", i);
 
 		if (drop_unmapped && se->flag >> 2 & 1) {
@@ -708,12 +732,8 @@ hash_sam (
 		/* discard secondary alignments */
 		if (drop_second && se->flag >> 11 & 1) {
 			se->exclude = 1;
-			if (se->which_ref == rindex) {
-				debug_msg_cont(fxn_debug >= DEBUG_I, fxn_debug, "remove %s secondary alignment to same reference\n", se->name);
-				++n_secondary;
-			} else {
-				debug_msg_cont(fxn_debug >= DEBUG_II, fxn_debug, "remove %s secondary alignment to wrong reference\n", se->name);
-			}
+			debug_msg_cont(fxn_debug >= DEBUG_I, fxn_debug, "remove %s secondary alignment\n", se->name);
+			++n_secondary;
 			continue;
 		}
 
@@ -739,54 +759,33 @@ hash_sam (
 			}
 			if (drop_sc < UINT_MAX && len_sc >= drop_sc) {
 				se->exclude = 1;
-				if (se->which_ref == rindex) {
-					debug_msg_cont(fxn_debug >= DEBUG_I, fxn_debug, "remove %s b/c soft clipped %uS\n", se->name, len_sc);
-					++n_soft_clip;
-				} else {
-					debug_msg_cont(fxn_debug >= DEBUG_II, fxn_debug, "remove %s b/c soft clipped on wrong reference\n", se->name);
-				}
+				debug_msg_cont(fxn_debug >= DEBUG_I, fxn_debug, "remove %s b/c soft clipped %uS\n", se->name, len_sc);
+				++n_soft_clip;
 				continue;
 
 			/* assume if user doesn't want soft-clipping, they also don't want hard-clipping */
 			} else if (drop_sc < UINT_MAX && len_hc >= drop_sc) {
 				se->exclude = 1;
-				if (se->which_ref == rindex) {
-					debug_msg_cont(fxn_debug >= DEBUG_I, fxn_debug, "remove %s b/c hard clipped\n", se->name);
-					++n_hard_clip;
-				} else {
-					debug_msg_cont(fxn_debug >= DEBUG_II, fxn_debug, "remove %s b/c hard clipped on wrong reference\n", se->name);
-				}
+				debug_msg_cont(fxn_debug >= DEBUG_I, fxn_debug, "remove %s b/c hard clipped\n", se->name);
+				++n_hard_clip;
 				continue;
 			}
 			if (drop_id < UINT_MAX && len_id >= drop_id) {
 				se->exclude = 1;
-				if (se->which_ref == rindex) {
-					debug_msg_cont(fxn_debug >= DEBUG_I, fxn_debug, "remove %s b/c of indels\n", se->name);
-					++n_indel;
-				} else {
-					debug_msg_cont(fxn_debug >= DEBUG_II, fxn_debug, "remove %s b/c of indels on wrong reference (%u == %zu)\n", se->name, se->which_ref, rindex);
-				}
+				debug_msg_cont(fxn_debug >= DEBUG_I, fxn_debug, "remove %s b/c of indels\n", se->name);
+				++n_indel;
 				continue;
 			}
 			if (max_length && len > max_length) {
-//mmessage(INFO_MSG, NO_ERROR, "Read %s length: %u\n", se->name, len);
 				se->exclude = 1;
-				if (se->which_ref == rindex) {
-					debug_msg_cont(fxn_debug >= DEBUG_I, fxn_debug, "remove %s b/c read too long\n", se->name);
-					++n_max_length;
-				} else {
-					debug_msg_cont(fxn_debug >= DEBUG_II, fxn_debug, "remove %s b/c read too long aligned to wrong reference\n", se->name);
-				}
+				debug_msg_cont(fxn_debug >= DEBUG_I, fxn_debug, "remove %s b/c read too long\n", se->name);
+				++n_max_length;
 				continue;
 			}
 			if (len < min_length) {
 				se->exclude = 1;
-				if (se->which_ref == rindex) {
-					debug_msg_cont(fxn_debug >= DEBUG_I, fxn_debug, "remove %s b/c read too short\n", se->name);
-					++n_min_length;
-				} else {
-					debug_msg_cont(fxn_debug >= DEBUG_II, fxn_debug, "remove %s b/c read too short aligned to wrong reference\n", se->name);
-				}
+				debug_msg_cont(fxn_debug >= DEBUG_I, fxn_debug, "remove %s b/c read too short\n", se->name);
+				++n_min_length;
 				continue;
 			}
 		}
@@ -797,24 +796,21 @@ hash_sam (
 				mee += qual_to_prob(se->qual, j);
 			if (mee > max_exp_err) {
 				se->exclude = 1;
-				if (se->which_ref == rindex) {
-					debug_msg_cont(fxn_debug >= DEBUG_I, fxn_debug, "remove %s alignment with too many expected errors\n", se->name);
-					++n_experr;
-				} else {
-					debug_msg_cont(fxn_debug >= DEBUG_II, fxn_debug, "remove %s alignment to wrong reference with too many expected errors\n", se->name);
-				}
+				debug_msg_cont(fxn_debug >= DEBUG_I, fxn_debug, "remove %s alignment with too many expected errors\n", se->name);
+				++n_experr;
 				continue;
 			}
 		}
 
 		/* count number mapped to each reference */
+		/* for external reference indicated by argument n_ref > 0
+		 * the sam_entry::which_ref must be already set in range
+		 * {0,1,...,n_ref-1}
+		 */
 		if (hash_on & HASH_REFERENCE)
 			if (!(se->flag >> 2 & 1L)) {
 				++s->n_per_ref[se->which_ref];
-				if (se->which_ref == rindex)
-					debug_msg_cont(fxn_debug >= DEBUG_II, fxn_debug, "retain %s\n", se->name);
-				else
-					debug_msg_cont(fxn_debug >= DEBUG_I, fxn_debug, "remove %s primary alignment to wrong reference\n", se->name);
+				debug_msg_cont(fxn_debug >= DEBUG_II, fxn_debug, "retain %s\n", se->name);
 			}
 
 		if (hash_on & HASH_NAME) { // notice, consider reverse or forward strand
@@ -853,17 +849,12 @@ hash_sam (
 		}
 	}
 
-	mmessage(INFO_MSG, NO_ERROR, "%zu total reads (reports below are for "
-			"reads mapping to reference %u)\n", s->n_se, rindex);
+	mmessage(INFO_MSG, NO_ERROR, "%zu total reads\n", s->n_se);
 
 	if (drop_unmapped)
 		mmessage(INFO_MSG, NO_ERROR, "%zu unmapped reads filtered\n",
 								n_unmapped);
 	
-	if (n_targeted_unmapped)
-		mmessage(INFO_MSG, NO_ERROR, "%zu targeted unmapped reads "
-					"filtered\n", n_targeted_unmapped);
-
 	if (drop_second)
 		mmessage(INFO_MSG, NO_ERROR, "%zu secondary alignments "
 						"filtered\n", n_secondary);
@@ -894,6 +885,7 @@ hash_sam (
 
 	if (hash_on != HASH_REFERENCE)
 		(*sh_in)->type = hash_on;
+
 	fill_hash(s, *sh_in, n_ref);
 
 	return NO_ERROR;

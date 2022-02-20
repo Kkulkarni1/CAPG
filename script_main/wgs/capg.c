@@ -13,6 +13,19 @@
  * - a good first test: have it genotype all targets for a single genotype
  */
 
+
+/* subgenome A                         E = read alignment extent
+ * \                                   T = target region,        A = aligned region
+ *  \ read 1
+ *   \\____           __/              E    T    A                           A     E T
+ *    \__________________/             |____|____|_________..._______________|_____|_|
+ *     __________________    =======> _____________________...__________________________
+ *    /      _____     _ \            |          | |                         |   |     |
+ *   /                  \ \           T          A E                         A   T     E
+ *                       \
+ *   subgenome B
+ */
+
 #include <stdlib.h>
 #include <string.h>
 #include <float.h>
@@ -39,7 +52,7 @@
 double ll_align(sam_entry *se, unsigned int i, unsigned char *ref, mlogit_stuff *vptr, unsigned char *show, size_t start_rf, int debug);
 int update_vcf(options *opt, int *fail[N_FILES], size_t *hpos[N_FILES]);
 uint64_t get_haplotype_id(sam_entry *se, size_t *haplotype, unsigned int n_segregating);
-int test_equal_homolog_coverage(merge_hash *mh, double **ll, char_t ref_base[N_FILES], char *covers, xy_t *obs_nuc, qual_t *obs_q, unsigned int *obs_rpos, int g_max[N_FILES], xy_t nuc1, xy_t nuc2, double pvals[N_FILES]);
+int test_equal_homolog_coverage(merge_hash *mh, ref_info *rfi, double **ll, char_t ref_base[N_FILES], char *covers, xy_t *obs_nuc, qual_t *obs_q, unsigned int *obs_rpos, int g_max[N_FILES], xy_t nuc1, xy_t nuc2, double pvals[N_FILES]);
 unsigned int ns_key_len = 3 * sizeof(data_t) + sizeof(unsigned int);
 
 
@@ -47,6 +60,7 @@ unsigned int ns_key_len = 3 * sizeof(data_t) + sizeof(unsigned int);
  * Test equal coverage of homologous chromosomes.
  *
  * @param mh		merged hash of aligned reads
+ * @param ref_info	reference information
  * @param ll		log likelihood of reads aligned to each subgenome
  * @param ref_base	reference bases
  * @param covers	indicate if retained reads cover the site
@@ -60,11 +74,12 @@ unsigned int ns_key_len = 3 * sizeof(data_t) + sizeof(unsigned int);
  * @param pvals		up to two pvals
  * @return		error status
  */
-int test_equal_homolog_coverage(merge_hash *mh, double **all,
-	char_t ref_base[N_FILES], char *covers, xy_t *obs_nuc,
-	qual_t *obs_q, unsigned int *obs_rpos, int g_max[N_FILES],
-	xy_t nuc1, xy_t nuc2, double pvals[N_FILES])
+int test_equal_homolog_coverage(merge_hash *mh, ref_info *rfi, double **all,
+	char_t ref_base[N_FILES], char *covers, xy_t *obs_nuc, qual_t *obs_q,
+	unsigned int *obs_rpos, int g_max[N_FILES], xy_t nuc1, xy_t nuc2,
+	double pvals[N_FILES])
 {
+	int fxn_debug = ABSOLUTE_SILENCE;//DEBUG_II;//
 	mlogit_stuff mls = {NULL, 0};
 	double epsilon = 1e-6;
 	double gamma[N_FILES] = {g_max[0]/2., g_max[1]/2.};
@@ -123,16 +138,19 @@ int test_equal_homolog_coverage(merge_hash *mh, double **all,
 
 			for (int i = 0; i < 2*N_FILES; ++i) {
 
+				xy_t tmp = obs_nuc[n_cover];
+				if (i>=2 && rfi->strand_B)
+					tmp = xy_to_rc[tmp];
 				cll[i] = lpi[i] + all[i/2][n_read]
 					- sub_prob_given_q_with_encoding(
 						ref_base[i/2],				/* homozygous ref base */
-						obs_nuc[n_cover], IUPAC_ENCODING, XY_ENCODING, obs_q[n_cover], 1, (void *)&mls)
+						tmp, IUPAC_ENCODING, XY_ENCODING, obs_q[n_cover], 1, (void *)&mls)
 					+ sub_prob_given_q_with_encoding(
 						 !g_max[i/2] ? xy_to_iupac[nuc1]	/* new genotype */
 						: g_max[i/2] == 2 ? xy_to_iupac[nuc2]
 						: !(i%2) ? xy_to_iupac[nuc1] : xy_to_iupac[nuc2],
 						obs_nuc[n_cover], IUPAC_ENCODING, XY_ENCODING, obs_q[n_cover], 1, (void *)&mls);
-	
+debug_msg(fxn_debug >= DEBUG_III, fxn_debug, "Read %zu: genotype %c -> %c emitting %c/%c has ll %f\n", n_read, iupac_to_char[ref_base[i/2]], xy_to_char[!g_max[i/2] ? nuc1 : g_max[i/2] == 2 ? nuc2 : !(i%2) ? nuc1: nuc2], xy_to_char[tmp], xy_to_char[obs_nuc[n_cover]], cll[i]);
 				if (cll[i] > max)
 					max = cll[i];
 			}
@@ -164,7 +182,7 @@ int test_equal_homolog_coverage(merge_hash *mh, double **all,
 			gamma[0] = new_gamma[0] / total1;
 		if (g_max[1] == 1)
 			gamma[1] = new_gamma[1] / total2;
-		//fprintf(stderr, "eta = %f, gamma1 = %f, gamma2 = %f, ll = %f, rel = %e\n", eta, gamma[0], gamma[1], ll, (pll - ll) / ll);
+		debug_msg(fxn_debug >= DEBUG_II, fxn_debug, "eta = %f, gamma1 = %f, gamma2 = %f, ll = %f, rel = %e\n", eta, gamma[0], gamma[1], ll, (pll - ll) / ll);
 	} while (iter++ < max_iter && (ll - pll) > -ll * epsilon);
 
 	if (g_max[0] == 1)
@@ -181,6 +199,7 @@ int test_equal_homolog_coverage(merge_hash *mh, double **all,
 	eta_h1 = eta;
 
 	ll1 = ll;
+	ll = -INFINITY;
 
 	for (int j = 0; j < N_FILES; ++j) {
 		if (g_max[j] != 1)
@@ -239,16 +258,20 @@ int test_equal_homolog_coverage(merge_hash *mh, double **all,
 	
 				for (int i = 0; i < 2*N_FILES; ++i) {
 	
+					xy_t tmp = obs_nuc[n_cover];
+					if (i>=2 && rfi->strand_B)
+						tmp = xy_to_rc[tmp];
 					cll[i] = lpi[i] + all[i/2][n_read]
 						- sub_prob_given_q_with_encoding(
 							ref_base[i/2],				/* homozygous ref base */
-							obs_nuc[n_cover], IUPAC_ENCODING, XY_ENCODING, obs_q[n_cover], 1, (void *)&mls)
+							tmp, IUPAC_ENCODING, XY_ENCODING, obs_q[n_cover], 1, (void *)&mls)
 						+ sub_prob_given_q_with_encoding(
 							 !g_max[i/2] ? xy_to_iupac[nuc1]	/* new genotype */
 							: g_max[i/2] == 2 ? xy_to_iupac[nuc2]
 							: !(i%2) ? xy_to_iupac[nuc1] : xy_to_iupac[nuc2],
 							obs_nuc[n_cover], IUPAC_ENCODING, XY_ENCODING, obs_q[n_cover], 1, (void *)&mls);
 		
+debug_msg(fxn_debug >= DEBUG_III, fxn_debug, "Read %zu: genotype %c -> %c emitting %c/%c has ll %f\n", n_read, iupac_to_char[ref_base[i/2]], xy_to_char[!g_max[i/2] ? nuc1 : g_max[i/2] == 2 ? nuc2 : !(i%2) ? nuc1: nuc2], xy_to_char[tmp], xy_to_char[obs_nuc[n_cover]], cll[i]);
 					if (cll[i] > max)
 						max = cll[i];
 				}
@@ -280,7 +303,7 @@ int test_equal_homolog_coverage(merge_hash *mh, double **all,
 				gamma[0] = new_gamma[0] / total1;
 			if (!j && g_max[1] == 1)
 				gamma[1] = new_gamma[1] / total2;
-			//fprintf(stderr, "eta = %f, gamma1 = %f, gamma2 = %f, ll = %f, rel = %e\n", eta, (g_max[0] && j) ? gamma[0] : 0.5, (g_max[1] && !j) ? gamma[1] : 0.5, ll, (pll - ll) / ll);
+			debug_msg(fxn_debug >= DEBUG_II, fxn_debug, "eta = %f, gamma1 = %f, gamma2 = %f, ll = %f, rel = %e\n", eta, (g_max[0] && j) ? gamma[0] : 0.5, (g_max[1] && !j) ? gamma[1] : 0.5, ll, (pll - ll) / ll);
 		} while (iter++ < max_iter && (ll - pll) > -ll * epsilon);
 	
 		double lrt = 2 * (ll1 - ll);
@@ -660,7 +683,6 @@ int main(int argc, const char *argv[])
 	sam *sds[N_FILES] = {NULL, NULL};
 	fastq_options fop = {.read_encoding = IUPAC_ENCODING, .read_names = 1};
 	sam_hash *by_name[N_FILES] = {NULL, NULL};//, NULL, NULL};
-	size_t my_refs[N_FILES] = {0, 0};//, 0, 0};
 	FILE *fp = NULL;
 	mlogit_stuff mls = {NULL, 0};
 	options_rf opt_rf;
@@ -676,56 +698,73 @@ int main(int argc, const char *argv[])
 	default_options_rf(&opt_rf);
 	opt_rf.sam_file = opt.sam_file;
 
-	/* set names for extracted ?? */
+	/* set names for extracted references */
 	size_t rfile_len = strlen(opt.extracted_rf) + strlen(".fsa") + (int)(log10(N_FILES) + 1) + 1;
 	for (int i = 0; i < N_FILES; ++i) {
 		opt_rf.extracted_rf[i] = malloc(rfile_len * sizeof(opt_rf.extracted_rf[i]));
 		sprintf(opt_rf.extracted_rf[i], "%s%d.fsa", opt.extracted_rf, i);
 	}
 
-	/* store information on aligned homoeologous reference segments */
-	make_targets_info(opt_rf, &rf_info);
+	/* chromosome names */
+	char *csome_names[N_FILES];
+	for (unsigned int j = 0; j < N_FILES; ++j) {
+		size_t i = 0;
+
+		while (i < strlen(opt.ref_names[j]) && opt.ref_names[j][i++] != opt_rf.delim_ref);
+		csome_names[j] = malloc(i-- * sizeof(*csome_names[j]));
+		strncpy(csome_names[j], opt.ref_names[j], i);
+		csome_names[j][i] = '\0';
+		mmessage(INFO_MSG, NO_ERROR, "Chromosome %u is '%s'\n", j, csome_names[j]);
+	}
+
+	/* read sam file with target alignments and retain information about
+	 * selected target
+	 */
+	make_targets_info(&opt_rf, &rf_info, opt.ref_names);
 	
-	/* read sam file of read alignments */
+	/* read sam files of read alignments */
 	for (unsigned int j = 0; j < N_FILES; ++j) {
 		fp = fopen(opt.sbam_files[j], "r");
 		if (!fp)
 			exit(mmessage(ERROR_MSG, FILE_OPEN_ERROR,
 					  opt.sbam_files[j]));
-		read_sam(fp, &sds[j]);
+		read_sam(fp, &sds[j], 1, 1);
 		fclose(fp);
 	}
 
-	/* pick the reads aligned to homoeologous targets: in each sam_entry
-	 * 	sam_entry::which_ref set to index of homoeologous alignment in
-	 *		external reference alignment file, and
-	 *	sam_entry::ref_name to targeted reference + targeted positions
-	 * TODO,KSD I do not see why separate ref_name is used; remove or overwrite sam_entry::name w/ more specific regional reference name
+	/* pick the reads aligned to homoeologous target, setting
+	 * sam_entry::which_ref = 0 for selected reads.
 	 */
-	pickreads(rf_info, &opt_rf, sds);
-	mmessage(INFO_MSG, NO_ERROR, "assign the reads to targeted regions done\n");
+	pickreads(rf_info, sds, (char const **)csome_names);
 
-	/* find index of user-selected reference in each read sam file: sets
-	 * 	my_refs[N_FILES]: EXTERNAL index of user-chosen reference
-	 *	sam_entry::name_s: append strand +|- to read name
-	 * TODO, KSD return this to how it was (search for each command-line reference), except search in external reference;
-	 * TODO, KSD remove name_s from sam_entry and use sam_entry::name in sam.c searches and output strings
+	/* index surviving reads to single target reference, while
+	 * dropping additional reads according to user-supplied filters
 	 */
-	char strand;
 	for (unsigned int j = 0; j < N_FILES; ++j) {
-		unsigned char found = 0;
+		
+		hash_sam(sds[j], &by_name[j], HASH_REFERENCE, 1, //my_refs[j], rf_info->ref_sam->n_se,
+			opt.drop_unmapped, opt.drop_secondary,
+			opt.drop_soft_clipped, opt.drop_indel, opt.min_length,
+			opt.max_length, opt.max_eerr);
+		
+		mmessage(INFO_MSG, NO_ERROR, "Number of %u alignments: %zu\n",
+			 j, sds[j]->n_per_ref[0]);
 
 		/* TODO,KSD This is slow, looping through EVERY read alignment. Why are we doing it?
 		 * YD: Because forward and reverse reads may share the same name and would hash as multiple alignments of same read without modifying the read name to indicate strand.
 		 */
+		/*
+		char strand;
+		unsigned char found = 0;
+
 		for (size_t i = 0; i < sds[j]->n_se; ++i) {
 			sam_entry *se = &sds[j]->se[i];
 			
-			/* skip unmapped */
+			// skip unmapped
 			if ((se->flag & (1 << 2)))
 				continue;
 
-			/* and those already filtered, including not mapping to target */
+			// and those already filtered, including not mapping to target
 			if (se->exclude == 1)
 				continue;
 
@@ -734,11 +773,11 @@ int main(int argc, const char *argv[])
 				if ((se->flag & 16) == 0) {
 					strand = '+';
 					// flip the strand if A is aligned to reverse complement of B
-					if (j && rf_info->info[se->which_ref].strand_B == 1)
+					if (j && rf_info->strand_B == 1)
 						strand = '-';
 				} else {
 					strand = '-';
-					if (j && rf_info->info[se->which_ref].strand_B == 1)
+					if (j && rf_info->strand_B == 1)
 						strand = '+';
 				}
 	
@@ -754,28 +793,16 @@ int main(int argc, const char *argv[])
 			exit(mmessage(ERROR_MSG, INVALID_USER_INPUT, "no "
 					  "reference '%s' in fasta file '%s'",
 					  opt.ref_names[j], opt.sbam_files[j]));
-		
-		/* KSD Now hash sam file to externally-provided references, 
-		 * not the references listed at the top of the SAM file itself, 
-		 * because each reference may be parsed into multiple, smaller
-		 * homoeologous targets.
-		 */
-		hash_sam(sds[j], &by_name[j], HASH_REFERENCE, my_refs[j],
-			rf_info->ref_sam->n_se, opt.drop_unmapped,
-			opt.drop_secondary, opt.drop_soft_clipped,
-			opt.drop_indel, opt.min_length, opt.max_length,
-							opt.max_eerr);
-		
-		mmessage(INFO_MSG, NO_ERROR, "Number of %u alignments: %zu\n",
-			 j, sds[j]->n_per_ref[my_refs[j]]);
+		*/
 	}
 
 	/* merge reads for given reference */
 	merge_hash *mh = NULL;
 
-	size_t n_read = hash_merge(&mh, N_FILES, sds, my_refs);
-	debug_msg(debug_level > ABSOLUTE_SILENCE, debug_level,
-		  "Number of reads present aligned to AT LEAST one of the reference: %zu\n", n_read);
+	size_t ref_indices[N_FILES] = {0,0};
+	size_t n_read = hash_merge(&mh, N_FILES, sds, ref_indices);
+	debug_msg(debug_level > ABSOLUTE_SILENCE, debug_level, "Number of reads"
+		" aligned to target in AT LEAST one subgenome: %zu\n", n_read);
 	
 	if (opt_rf.fastq_file)
 		output_selected_reads(opt_rf.fastq_file, sds, mh);
@@ -785,18 +812,16 @@ int main(int argc, const char *argv[])
 	if (opt.ampliclust_command)
 		make_input(&in);
 	
-	/* count number of alignments and obtain their extent on reference */
-	size_t n_align = 0;
-	size_t start_pos[N_FILES];	/* 0-based starting position */
-	size_t end_pos[N_FILES];	/* 1-based ending position */
-	for (unsigned int i = 0; i < N_FILES; ++i) {
-		start_pos[i] = SIZE_MAX;
-		end_pos[i] = 0;
-	}
-	
 	/* exclude reads not aligned to both genomes;
 	 * identify extent of alignments on reference genome
 	 */
+	size_t start_reference[N_FILES];/* 0-based start of reference segment in each subgenome, inclusive */
+	size_t end_reference[N_FILES];	/* 0-based end of reference segment in each subgenome, exclusive */
+	for (unsigned int i = 0; i < N_FILES; ++i) {
+		start_reference[i] = SIZE_MAX;
+		end_reference[i] = 0;
+	}
+
 	n_read = 0;
 	for (merge_hash *me = mh; me != NULL; me = me->hh.next) {
 		
@@ -805,8 +830,8 @@ int main(int argc, const char *argv[])
 			mmessage(INFO_MSG, NO_ERROR, "Read %s does not "
 				 "align to all genomes (skipping).\n",
 				me->indices[0]	// TODO: hack
-				? sds[0]->se[me->indices[0][0]].name_s
-				: sds[1]->se[me->indices[1][0]].name_s);
+				? sds[0]->se[me->indices[0][0]].name
+				: sds[1]->se[me->indices[1][0]].name);
 			continue;
 		}
 		
@@ -817,7 +842,7 @@ int main(int argc, const char *argv[])
 				me->exclude = 1;
 				mmessage(INFO_MSG, NO_ERROR,
 					"Read %s aligns %dx in genome %u.\n",
-					 sds[j]->se[me->indices[j][0]].name_s, me->count[j], j);
+					 sds[j]->se[me->indices[j][0]].name, me->count[j], j);
 				break;
 			}
 		}
@@ -829,47 +854,55 @@ int main(int argc, const char *argv[])
 			sam_entry *se = &sds[j]->se[me->indices[j][0]];
 			size_t rf_pos = se->pos - 1;
 
-			n_align += me->count[j];
-			if (start_pos[j] > rf_pos)
-				start_pos[j] = rf_pos;
+			if (start_reference[j] > rf_pos)
+				start_reference[j] = rf_pos;
 			rf_pos += se->cig->length_rf;
-			if (end_pos[j] < rf_pos)
-				end_pos[j] = rf_pos;
+			if (end_reference[j] < rf_pos)
+				end_reference[j] = rf_pos;
 		}
 
 		++n_read;
 	}
 
-	if (n_read == 0)
+	if (!n_read)
 		exit(mmessage(ERROR_MSG, INTERNAL_ERROR,
 				  "No read aligns to selected genome %s.\n"));
 
 	for (unsigned int i = 0; i < N_FILES; ++i)
-		mmessage(INFO_MSG, NO_ERROR, "File %u extent relative to the whole genome [%u, %u)\n",
-			 i, start_pos[i], end_pos[i]);
+		mmessage(INFO_MSG, NO_ERROR, "Read extent on subgenome %u: [%u, %u)\n",
+			 i, start_reference[i], end_reference[i]);
+
+	/* extend reference regions to at least cover the user-selected
+	 * target region
+	 */
+	if (start_reference[0] > rf_info->start_A)
+		start_reference[0] = rf_info->start_A;
+	if (end_reference[0] < rf_info->end_A)
+		end_reference[0] = rf_info->end_A;
+	if (start_reference[1] > rf_info->start_B)
+		start_reference[1] = rf_info->start_B;
+	if (end_reference[1] < rf_info->end_B)
+		end_reference[1] = rf_info->end_B;
+
+	for (unsigned int i = 0; i < N_FILES; ++i)
+		mmessage(INFO_MSG, NO_ERROR, "Selected region on subgenome %u: [%u, %u)\n",
+			 i, start_reference[i], end_reference[i]);
 
 	/* TODO: handle >2 subgenomes in next two steps */
 
 	/* record information about the reference alignment */
-	match_pair(rf_info, my_refs[0]);
+	match_pair(rf_info);
 
 	/* match soft-clips so likelihood computed from same data in all subgenomes */
-	match_soft_clipping(mh, N_FILES, sds, rf_info->info[my_refs[1]].strand_B);
+	match_soft_clipping(mh, N_FILES, sds, rf_info->strand_B);
 	
-	double **pp = malloc(N_FILES * sizeof *pp);
-	double **ll = malloc(N_FILES * sizeof *ll);
+	double **pp = malloc(N_FILES * sizeof(*pp));
+	double **ll = malloc(N_FILES * sizeof(*ll));
 
 	for (unsigned int j = 0; j < N_FILES; ++j) {
-		debug_msg(debug_level > ABSOLUTE_SILENCE, debug_level, "Genome "
-			  "%u extent: %zu - %zu\n", j, start_pos[j], end_pos[j]);
-		
-		if (j && end_pos[j] - start_pos[j]
-			!= end_pos[j-1] - start_pos[j-1])
-			mmessage(WARNING_MSG, NO_ERROR, "WARNING:  Genome %u "
-				 "and %u alignment regions differ in length.\n",
-				 j, j - 1);
-		pp[j] = malloc(n_read * sizeof **pp);	/* overestimated */
-		ll[j] = malloc(n_read * sizeof **ll);	/* overestimated */
+
+		pp[j] = malloc(n_read * sizeof(**pp));	/* overestimated */
+		ll[j] = malloc(n_read * sizeof(**ll));	/* overestimated */
 	}
 	
 	if (opt.param_file) {
@@ -893,29 +926,17 @@ int main(int argc, const char *argv[])
 	if (opt.min_log_likelihood > 0)
 		MAKE_1ARRAY(mll, n_read);
 	
-	/* extract the portion of reference sequences involved in alignments
-	 * from whole genome reference FASTA files: output as FASTA files
+	/* extract the desired region of reference sequences from whole genome
+	 * reference FASTA files: output as FASTA files; recall this region
+	 * contains the target region, but may be longer
 	 */
-	char *region[N_FILES] = {NULL, NULL}; // cat ref_names and ref_region [1-based, inclusive]
-	unsigned long least[N_FILES] = {start_pos[0] + 1, start_pos[1] + 1};
-	
-	/* delimiters in samtools[avoid hard code] */
-	char *delim_sep = ":";
-	char *delim_loci = "-";
 	for (int j = 0; j < N_FILES; ++j) {
-		char temp[strlen(opt.ref_names[j]) + 1];
-		char *ptr = NULL;
-		size_t length;
 
-		strcpy(temp, opt.ref_names[j]);
-		ptr = strtok(temp, opt_rf.delim_ref);
-		length = strlen(ptr) + strlen(delim_loci) + strlen(delim_sep) + (int)(log10(least[j]) + 1) + (int)(log10(end_pos[j]) + 1) + 1;
-		region[j] = malloc(length * sizeof(*region[j]));
-		sprintf(region[j], "%s%s%zu%s%zu", ptr, delim_sep, least[j], delim_loci, end_pos[j]);
+		mmessage(INFO_MSG, NO_ERROR, "samtools index region %zu-%zu in reference %s\n", start_reference[j] + 1, end_reference[j], csome_names[j]);
 
-		mmessage(INFO_MSG, NO_ERROR, "samtools index region: %s, ref index: %zu\n", region[j], my_refs[j]);
-
-		extract_ref(opt_rf.samtools_command, region[j], opt.fsa_files[j], opt_rf.extracted_rf[j]);
+		extract_ref(opt_rf.samtools_command, csome_names[j], //opt.ref_names[j],
+			start_reference[j], end_reference[j],
+			opt.fsa_files[j], opt_rf.extracted_rf[j], &opt_rf);
 
 		/* read in reference genomes */
 		if ((err = read_fastq(opt_rf.extracted_rf[j], &fds[j], &fop)))
@@ -949,12 +970,11 @@ int main(int argc, const char *argv[])
 		for (unsigned int j = 0; j < N_FILES; ++j) {
 			sam_entry *se = &sds[j]->se[me->indices[j][0]];
 			// se->pos should be adjusted since the reference is a selected region, but do not need to consider the RC of B, since read is aligned to forward of B
-//			fprintf(stderr, "relative start pos: %lu\n", se->pos - least[j]);
 			pp[j][n_read] = ll_align(se, n_read,
 				&fds[j]->reads[fs_index[j]], &mls, &show,
-				se->pos - least[j],	/* 0-based, relative start of reference involved in alignment */
+				se->pos - start_reference[j] - 1,	/* 0-based, relative start of alignment in previously extracted reference */
 				debug_level); //, n_read == 955 ? DEBUG_III : debug_level);
-//						fprintf(stderr, "%s = %lf  ", se->name_s, pp[j][n_read]);
+//						fprintf(stderr, "%s = %lf  ", se->name, pp[j][n_read]);
 			ll[j][n_read] = pp[j][n_read];
 			//if (isnan(ll[j][n_read])) tmp_debug = DEBUG_II;
 			if (max < pp[j][n_read])
@@ -969,7 +989,7 @@ int main(int argc, const char *argv[])
 			me->exclude = 1;
 			mmessage(INFO_MSG, NO_ERROR, "Read %s excluded for max "
 				 "alignment log likelihood %f (below threshold "
-				 "%f).\n", sds[0]->se[me->indices[0][0]].name_s,
+				 "%f).\n", sds[0]->se[me->indices[0][0]].name,
 				 		max, opt.min_log_likelihood);
 			++n_addl_excluded;
 			if (opt.ampliclust_command)
@@ -1215,39 +1235,42 @@ int main(int argc, const char *argv[])
 							 opt.sample_name);
    	}
 	
-	/* shorten the region to be the target: [start, end) */
-	/* until now, we have been collecting reads aligning to the larger
-	 * region containing the target.
-	 */
-	size_t region_len = end_pos[1] - start_pos[1];
-	if (end_pos[0] - start_pos[0] > region_len)
-		region_len = end_pos[0] - start_pos[0];
-	
-	start_pos[0] = rf_info->info[my_refs[0]].start_A;
-	end_pos[0] = rf_info->info[my_refs[0]].end_A;
-	start_pos[1] = rf_info->info[my_refs[1]].start_B;
-	end_pos[1] = rf_info->info[my_refs[1]].end_B;
-	
 	/* store information for post-hoc tests of allelic coverage */
 	/* [BUG,KSD] no memory allocation checks */
+	size_t region_len = 0;
 	size_t *haplotype_posns[N_FILES];	/* positions of het calls */
-	haplotype_posns[0] = calloc(region_len, sizeof *haplotype_posns[0]);
-	haplotype_posns[1] = calloc(region_len, sizeof *haplotype_posns[1]);
-
-	/* proportion of reads matching dominant haplotype in each subgenome */
-	double *hapA_prop = malloc(region_len * sizeof *hapA_prop);
-	double *hapB_prop = malloc(region_len * sizeof *hapB_prop);
-
-	/* coverage of dominant haplotype in each subgenome */
-	double *hapA_covg = malloc(region_len * sizeof *hapA_covg);
-	double *hapB_covg = malloc(region_len * sizeof *hapB_covg);
-
-	/* dominant nucleotides at each position of dominant haplotype */
-	xy_t *hapA_dom_nuc = calloc(region_len, sizeof *hapA_dom_nuc);
-	xy_t *hapB_dom_nuc = calloc(region_len, sizeof *hapB_dom_nuc);
-	size_t *haplotypeA = calloc(region_len, sizeof *haplotypeA);
-	size_t *haplotypeB = calloc(region_len, sizeof *haplotypeB);
 	unsigned int n_segregatingA = 0, n_segregatingB = 0;
+	double *hapA_prop = NULL, *hapB_prop = NULL, *hapA_covg = NULL, *hapB_covg = NULL;
+	xy_t *hapA_dom_nuc = NULL, *hapB_dom_nuc = NULL;
+
+	if (opt.posthoc_coverage_test) {
+		region_len = end_reference[1] - start_reference[1];
+		if (end_reference[0] - start_reference[0] > region_len)
+			region_len = end_reference[0] - start_reference[0];
+
+		haplotype_posns[0] = calloc(region_len, sizeof *haplotype_posns[0]);
+		haplotype_posns[1] = calloc(region_len, sizeof *haplotype_posns[1]);
+	
+		/* proportion of reads matching dominant haplotype in each subgenome */
+		hapA_prop = malloc(region_len * sizeof *hapA_prop);
+		hapB_prop = malloc(region_len * sizeof *hapB_prop);
+	
+		/* coverage of dominant haplotype in each subgenome */
+		hapA_covg = malloc(region_len * sizeof *hapA_covg);
+		hapB_covg = malloc(region_len * sizeof *hapB_covg);
+	
+		/* dominant nucleotides at each position of dominant haplotype */
+		hapA_dom_nuc = calloc(region_len, sizeof *hapA_dom_nuc);
+		hapB_dom_nuc = calloc(region_len, sizeof *hapB_dom_nuc);
+	}
+
+	size_t start_target[N_FILES];
+	size_t end_target[N_FILES];
+
+	start_target[0] = rf_info->start_A;	/* 0-based, inclusive */
+	end_target[0] = rf_info->end_A;		/* 0-based, exclusive */
+	start_target[1] = rf_info->start_B;
+	end_target[1] = rf_info->end_B;
 	
 	//debug_level = DEBUG_II;
 	fprintf(stderr, "Start genotyping\n");
@@ -1258,26 +1281,24 @@ int main(int argc, const char *argv[])
 	}
 	//the reference index of A AND B should be adjusted according to the cigar string, this only genotype on the site that are not -/A or A/-
 	/* finally: march along reference positions and genotype */
-	for (size_t posA = start_pos[0]; posA < end_pos[0]; ++posA) {
-	//for (size_t posA = 141434329; posA < 141434330; ++posA) {
-		ref_entry *re = &rf_info->info[my_refs[0]];
-		size_t target_a = posA; 		/* 0-based, absolute position within aligned region of genome A */
-		size_t site = target_a - start_pos[0];	/* relative location within aligned region of subgenome A */
+	for (size_t posA = start_target[0]; posA < end_target[0]; ++posA) {
+	//for (size_t posA = 77536234; posA < 77536235; ++posA) {
+		//ref_entry *re = rf_info;
+		size_t target_a = posA; 			/* 0-based, absolute position and ... */
+		size_t site = target_a - start_target[0];	/* relative position in aligned region of subgenome A */
 		
 		/* skip insertions in genome A; insertions in genome B are ignored by loop over posA */
-		if (re->idx_map[site] == -1) {
+		if (rf_info->map_A_to_B[site] == -1) {
 			debug_msg(debug_level > ABSOLUTE_SILENCE, debug_level,
 				  "Site %zu is not a homologous position, skip\n", site);
 			continue;
 		}
 
-		size_t target_b = start_pos[1] + re->idx_map[site]; /* 0-based, absolute position within aligned region of genome B */
-		double prob_heterozygoteA = 0, prob_heterozygoteB = 0;
-		double prob_heterozygote[N_FILES] = {0, 0};	/* [KSD,TODO] Assumes N_FILES == 2 */
+		size_t target_b = start_target[1] + rf_info->map_A_to_B[site]; /* 0-based, absolute position within aligned region of genome B */
 
 		debug_msg(debug_level > ABSOLUTE_SILENCE, debug_level,
 			  "Site A %zu (target_a = %zu; target_b = %zu, "
-			  "A_align_B = %d; start_pos[0] = %u)\n", site, target_a, target_b, re->idx_map[site], start_pos[0]);
+			  "A_align_B = %d; start_target[0] = %u)\n", site, target_a, target_b, rf_info->map_A_to_B[site], start_target[0]);
 
 		/* count each of alleles across all reads */
 		for (int b = 0; b < NUM_NUCLEOTIDES; ++b) {
@@ -1303,7 +1324,7 @@ int main(int argc, const char *argv[])
 			size_t rf_idx = se->pos - 1;
 
 			rd_idxA[n_read] = -1;	/* default: assume not covering */
-//debug_msg(debug_level > ABSOLUTE_SILENCE, debug_level, "Read %s (%u), rf_idx=%zu, n_ashes=%u\n", se->name_s, n_read, rf_idx, se->cig->n_ashes);
+//debug_msg(debug_level > ABSOLUTE_SILENCE, debug_level, "Read %s (%u), rf_idx=%zu, n_ashes=%u\n", se->name, n_read, rf_idx, se->cig->n_ashes);
 			
 			if (rf_idx > target_a) {
 				++n_read;
@@ -1313,7 +1334,7 @@ int main(int argc, const char *argv[])
 			for (unsigned int j = 0; j < se->cig->n_ashes; ++j) {
 				
 				debug_msg(debug_level > DEBUG_I, debug_level, "Read %s (%u) ash %u%c (%u), rd_idx=%d, target_a=%d, rf_idx=%d\n",
-					se->name_s, n_read, se->cig->ashes[j].len, cigar_char[se->cig->ashes[j].type], j, rd_idx, target_a, rf_idx);
+					se->name, n_read, se->cig->ashes[j].len, cigar_char[se->cig->ashes[j].type], j, rd_idx, target_a, rf_idx);
 				/* reference consumed */
 				if (se->cig->ashes[j].type == CIGAR_DELETION
 					|| se->cig->ashes[j].type == CIGAR_SKIP) {
@@ -1342,10 +1363,10 @@ int main(int argc, const char *argv[])
 				/* read and reference consumed */
 				/* desired site within this ash */
 				if (rf_idx + se->cig->ashes[j].len > target_a) {
-					debug_msg(debug_level > DEBUG_I, debug_level, "Read %s (%u) covers target position %u in %u%c from (%zu-%zu) with rd_idx = %lu\n",
-						se->name_s, n_read, target_a, se->cig->ashes[j].len, cigar_char[se->cig->ashes[j].type], rf_idx, rf_idx + se->cig->ashes[j].len, rd_idx + target_a - rf_idx);
 					rd_idxA[n_read] = rd_idx + target_a - rf_idx;
-					ref_base[0] = fds[0]->reads[fs_index[0] - least[0] + 1 + rd_idx + target_a];
+					ref_base[0] = fds[0]->reads[fs_index[0] + target_a - start_reference[0]];
+					debug_msg(debug_level >= DEBUG_I, debug_level, "Read %s (%u) covers target %c at position %u in %u%c from (%zu-%zu) with rd_idx = %lu\n",
+						se->name, n_read, iupac_to_char[ref_base[0]], target_a, se->cig->ashes[j].len, cigar_char[se->cig->ashes[j].type], rf_idx, rf_idx + se->cig->ashes[j].len, rd_idx + target_a - rf_idx);
 					n_cover_A++;
 					break;
 				}
@@ -1358,8 +1379,8 @@ int main(int argc, const char *argv[])
 
 		debug_msg(debug_level > ABSOLUTE_SILENCE, debug_level,
 			  "Site A %zu (target_a = %zu; target_b = %zu, "
-			  "start_pos[0] = %u): A coverage = %zu (%zu)\n", site,
-			  ref_pos[0], ref_pos[1], start_pos[0], n_cover_A, n_read);
+			  "start_target[0] = %u): A coverage = %zu (%zu)\n", site,
+			  ref_pos[0], ref_pos[1], start_target[0], n_cover_A, n_read);
 		
 		/* no reads cover this site after accounting for soft-clipping */
 		if (!n_cover_A)
@@ -1374,32 +1395,53 @@ int main(int argc, const char *argv[])
 			
 			if (me->exclude)
 				continue;
+
+			covers[n_read] = 0;	/* assume: not covering */
+
+			if (rd_idxA[n_read] == -1) {
+				++n_read;
+				continue;
+			}
 			
 			/* B alignment */
 			sam_entry *se = &sds[1]->se[me->indices[1][0]];
 			unsigned int rd_idx = 0;
-			size_t rf_idx = se->pos - 1;
+			size_t rf_idx = //se->pos - 1;
+				rf_info->strand_B 
+					? se->pos - 1 + se->cig->length_rf - 1 // 0-based
+					: se->pos - 1;
 
-/*
-debug_msg(debug_level > ABSOLUTE_SILENCE, debug_level, "Read %s (%u), rf_idx=%zu, cigar len=%u\n", 
+			debug_msg(debug_level > DEBUG_I, debug_level, "Read "
+				"%s (%u)%s, pos=%u, rf_len=%u, target_b=%zu, "
+				"rf_idx=%zu, cigar=", 
 				me->indices[0]	// TODO: hack
-				? sds[0]->se[me->indices[0][0]].name_s
-				: sds[1]->se[me->indices[1][0]].name_s,
-				n_read, rf_idx, se->cig->n_ashes);
-*/
+				? sds[0]->se[me->indices[0][0]].name
+				: sds[1]->se[me->indices[1][0]].name,
+				n_read, rf_info->strand_B ? " [rc B]" : "",
+				se->pos, se->cig->length_rf,
+				target_b, rf_idx);
+			debug_call(debug_level > ABSOLUTE_SILENCE, debug_level, print_cigar(stderr, se));
+			debug_msg_cont(debug_level > ABSOLUTE_SILENCE, debug_level, "\n");
+/**/
 
-			covers[n_read] = 0;	/* assume: not covering */
 			
 			/* aligned to forward strand of B subgenome */
-			if (!rf_info->info[my_refs[1]].strand_B) {
+			if (!rf_info->strand_B) {
 				if (rf_idx > target_b) {
 					n_read++;
 					continue;
 				}
 				for (unsigned int j = 0; j < se->cig->n_ashes; ++j) {
 					
-debug_msg(debug_level > DEBUG_I, debug_level, "Read %s (%u) cigar %u%c (%u), rd_idxA[%u] = %d, rd_idx=%d, target_b=%d, rf_idx=%d\n",
-	se->name_s, n_read, se->cig->ashes[j].len, cigar_char[se->cig->ashes[j].type], j, n_read, rd_idxA[n_read], rd_idx, target_b, rf_idx);
+					debug_msg(debug_level > DEBUG_I, debug_level,
+						"Read %s (%u) cigar %u%c (%u), "
+						"rd_idxA[%u] = %d, rd_idx=%d, "
+						"target_b=%d, rf_idx=%d\n", se->name,
+						n_read, se->cig->ashes[j].len,
+						cigar_char[se->cig->ashes[j].type],
+						j, n_read, rd_idxA[n_read], rd_idx,
+						target_b, rf_idx);
+
 					/* reference consumed */
 					if (se->cig->ashes[j].type == CIGAR_DELETION
 						|| se->cig->ashes[j].type == CIGAR_SKIP) {
@@ -1438,21 +1480,20 @@ debug_msg(debug_level > DEBUG_I, debug_level, "Read %s (%u) cigar %u%c (%u), rd_
 						ebaseB[obs_nuc[n_cover]] += 1 - pp[0][n_read];
 						++num_nuc[obs_nuc[n_cover]];
 						obs_q[n_cover] = get_qual(se->qual, obs_rpos[n_cover]);
-						ref_base[1] = fds[1]->reads[fs_index[1] + rd_idx + target_b - least[1] + 1];
-						debug_msg(debug_level > DEBUG_I, debug_level, "[SUCCESS] Read %s (%u) covers target position %u in %u%c from (%zu-%zu) with nucleotide %c at rd_idx = %lu and pp[A]=%f\n",
-							se->name_s, n_read, target_b, se->cig->ashes[j].len, cigar_char[se->cig->ashes[j].type], rf_idx, rf_idx + se->cig->ashes[j].len, xy_to_char[obs_nuc[n_cover]], obs_rpos[n_cover], pp[0][n_read]);
+						ref_base[1] = fds[1]->reads[fs_index[1] + target_b - start_reference[1]];
+						debug_msg(debug_level >= DEBUG_I, debug_level, "[SUCCESS] Read %s (%u) covers target %c at position %u in %u%c from (%zu-%zu) with nucleotide %c at rd_idx = %lu and pp[A]=%f\n",
+							se->name, n_read, iupac_to_char[ref_base[1]], target_b, se->cig->ashes[j].len, cigar_char[se->cig->ashes[j].type], rf_idx, rf_idx + se->cig->ashes[j].len, xy_to_char[obs_nuc[n_cover]], obs_rpos[n_cover], pp[0][n_read]);
 						++n_cover;
 						break;
 					} else if (rf_idx + se->cig->ashes[j].len > target_b) {
 						debug_msg(debug_level > DEBUG_I, debug_level, "[FAILURE] Read %s (%u) covers target position %u in %u%c from (%zu-%zu) but rd_idx = %lu\n",
-							se->name_s, n_read, target_b, se->cig->ashes[j].len, cigar_char[se->cig->ashes[j].type], rf_idx, rf_idx + se->cig->ashes[j].len, rd_idx + target_b - rf_idx);
+							se->name, n_read, target_b, se->cig->ashes[j].len, cigar_char[se->cig->ashes[j].type], rf_idx, rf_idx + se->cig->ashes[j].len, rd_idx + target_b - rf_idx);
 					}
 					rf_idx += se->cig->ashes[j].len;
 					rd_idx += se->cig->ashes[j].len;
 				}
 			/* B is reverse complemented in alignment to A: reverse complement the sam alignment */
 			} else {
-				rf_idx = se->pos - 1 + se->cig->length_rf - 1; // 0-based
 				if (rf_idx < target_b) {
 					n_read++;
 					continue;
@@ -1460,7 +1501,7 @@ debug_msg(debug_level > DEBUG_I, debug_level, "Read %s (%u) cigar %u%c (%u), rd_
 				
 				for (unsigned int j = se->cig->n_ashes; j-- > 0; ) {
 					debug_msg(debug_level > DEBUG_I, debug_level, "Read %s (%u) cigar %u%c (%u), rd_idxA[%u] = %d, rd_idx=%d, target_b=%d, rf_idx=%d\n",
-						se->name_s, n_read, se->cig->ashes[j].len, cigar_char[se->cig->ashes[j].type], j, n_read, rd_idxA[n_read], rd_idx, target_b, rf_idx);
+						se->name, n_read, se->cig->ashes[j].len, cigar_char[se->cig->ashes[j].type], j, n_read, rd_idxA[n_read], rd_idx, target_b, rf_idx);
 					/* reference consumed */
 					if (se->cig->ashes[j].type == CIGAR_DELETION
 						|| se->cig->ashes[j].type == CIGAR_SKIP) {
@@ -1501,14 +1542,14 @@ debug_msg(debug_level > DEBUG_I, debug_level, "Read %s (%u) cigar %u%c (%u), rd_
 						ebaseB[obs_nuc[n_cover]] += 1 - pp[0][n_read];
 						++num_nuc[obs_nuc[n_cover]];
 						obs_q[n_cover] = get_qual(se->qual, se->read->len - obs_rpos[n_cover] - 1);
-						ref_base[1] = fds[1]->reads[fs_index[1] + rd_idx + target_b - least[1] + 1]; // need to reverse complement B
-						debug_msg(debug_level > DEBUG_I, debug_level, "[SUCCESS] Read %s (%u) covers target position %u in %u%c from (%zu-%zu) with nucleotide %c at rd_idx = %lu and pp[A]=%f\n",
-							se->name_s, n_read, target_b, se->cig->ashes[j].len, cigar_char[se->cig->ashes[j].type], rf_idx, rf_idx + se->cig->ashes[j].len, xy_to_char[obs_nuc[n_cover]], obs_rpos[n_cover], pp[0][n_read]);
+						ref_base[1] = fds[1]->reads[fs_index[1] + target_b - start_reference[1]]; // need to reverse complement B
+						debug_msg(debug_level >= DEBUG_I, debug_level, "[SUCCESS] Read %s (%u) covers target %c at position %u in %u%c from (%zu-%zu) with nucleotide %c at rd_idx = %lu and pp[A]=%f\n",
+							se->name, n_read, iupac_to_char[ref_base[1]], target_b, se->cig->ashes[j].len, cigar_char[se->cig->ashes[j].type], rf_idx, rf_idx + se->cig->ashes[j].len, xy_to_char[obs_nuc[n_cover]], obs_rpos[n_cover], pp[0][n_read]);
 						++n_cover;
 						break;
-					} else if (rf_idx + se->cig->ashes[j].len > target_b) {
+					} else if (rf_idx - se->cig->ashes[j].len < target_b) {
 						debug_msg(debug_level > DEBUG_I, debug_level, "[FAILURE] Read %s (%u) covers target position %u in %u%c from (%zu-%zu) but rd_idx = %lu\n",
-							se->name_s, n_read, target_b, se->cig->ashes[j].len, cigar_char[se->cig->ashes[j].type], rf_idx, rf_idx + se->cig->ashes[j].len, rd_idx + rf_idx - target_b);
+							se->name, n_read, target_b, se->cig->ashes[j].len, cigar_char[se->cig->ashes[j].type], rf_idx, rf_idx + se->cig->ashes[j].len, rd_idx + rf_idx - target_b);
 					}
 					rf_idx -= se->cig->ashes[j].len;
 					rd_idx += se->cig->ashes[j].len;
@@ -1516,12 +1557,12 @@ debug_msg(debug_level > DEBUG_I, debug_level, "Read %s (%u) cigar %u%c (%u), rd_
 			}
 			++n_read;
 		}
-		
+
 		//debug_msg_cont(debug_level > QUIET, debug_level, "\n");
 		debug_msg(debug_level > ABSOLUTE_SILENCE, debug_level,
 			  "Site %zu (target_a = %zu; target_b = %zu, "
-			  "start_pos[0] = %u): A + B coverage = %zu (%zu)\n",
-			  site, ref_pos[0], ref_pos[1], start_pos[0], n_cover,
+			  "start_target[0] = %u): A + B coverage = %zu (%zu)\n",
+			  site, ref_pos[0], ref_pos[1], start_target[0], n_cover,
 			  						n_read);
 
 		/* no reads cover this site IN BOTH GENOME */
@@ -1566,65 +1607,6 @@ debug_msg(debug_level > DEBUG_I, debug_level, "Read %s (%u) cigar %u%c (%u), rd_
 			continue;
 		}
 		
-//		if (mina != sumA) {
-//			for (unsigned int i = 1; i <= sumA; ++i)
-//				penalty_A += log(i);
-//			for (unsigned int i = 1; i <= mina; ++i)
-//				penalty_A -= log(i);
-//			for (unsigned int i = 1; i <= sumA - mina; ++i)
-//				penalty_A -= log(i);
-//			penalty_A += (sumA) * log(0.5) * opt.weight_penalty;
-////			fprintf(stderr, "penalty A: %f\n", penalty_A);
-//		}
-//		if (minb != sumB) {
-//			for (unsigned int i = 1; i <= sumB; ++i)
-//				penalty_B += log(i);
-//			for (unsigned int i = 1; i <= minb; ++i)
-//				penalty_B -= log(i);
-//			for (unsigned int i = 1; i <= sumB - minb; ++i)
-//				penalty_B -= log(i);
-//			penalty_B += (sumB) * log(0.5) * opt.weight_penalty;
-////			fprintf(stderr, "penalty B: %f\n", penalty_B);
-//		}
-
-		int tmp = start_pos[0] + 1 - least[0];
-		int distA = abs(tmp);
-		iupac_t ref_allele[N_FILES];
-
-		if (!rf_info->info[my_refs[1]].strand_B) {
-			tmp = start_pos[1] + re->idx_map[0] + 1 - least[1];
-			int distB = abs(tmp);
-			if (start_pos[1] + re->idx_map[0] + 1 < least[1])
-				ref_allele[1] = fds[1]->reads[fs_index[1] + target_b - start_pos[1] - distB];
-			else
-				ref_allele[1] = fds[1]->reads[fs_index[1] + target_b - start_pos[1] + distB];
-			if (start_pos[0] + 1 < least[0])
-				ref_allele[0] = fds[0]->reads[fs_index[0] + site - distA];
-			else
-				ref_allele[0] = fds[0]->reads[fs_index[0] + site + distA];
-		} else {
-			tmp = start_pos[1] + 1 - least[1];
-			int distB = abs(tmp);
-			if (start_pos[1] + 1 < least[1])
-				ref_allele[1] = iupac_to_rc[fds[1]->reads[fs_index[1] + target_b - start_pos[1] - distB]];
-			else
-				ref_allele[1] = iupac_to_rc[fds[1]->reads[fs_index[1] + target_b - start_pos[1] + distB]];
-			if (start_pos[0] + 1 < least[0])
-				ref_allele[0] = fds[0]->reads[fs_index[0] + site - distA];
-			else
-				ref_allele[0] = fds[0]->reads[fs_index[0] + site + distA];
-		}
-		
-//		fprintf(stderr, "referenceA: %c\n",iupac_to_char[ref_allele[0]]);
-//		fprintf(stderr, "referenceB: %c\n",iupac_to_char[ref_allele[1]]);
-//				double sumA = 0, sumB = 0;
-		
-		//
-		//		debug_msg(debug_level > ABSOLUTE_SILENCE, debug_level, "A %f; B %f; ratios %f; %f (%f)\n", sumA, sumB, sumA/A_expected_coverage, sumB/B_expected_coverage, opt.coverage_screen);
-		//		if ((sumA/A_expected_coverage < opt.coverage_screen) || (sumB/B_expected_coverage < opt.coverage_screen)) {
-		//			debug_msg(debug_level > QUIET, debug_level, "Coverage rate is too low, discard this site!\n");
-		//			continue;
-		//		}
 		/* identify most and second most common allele */
 		nuc1 = nuc2 = XY_A;
 		num_nuc1 = num_nuc[nuc1];
@@ -1658,8 +1640,8 @@ debug_msg(debug_level > DEBUG_I, debug_level, "Read %s (%u) cigar %u%c (%u), rd_
 			* min_expected_coverage / 2) {
 			debug_msg(debug_level > QUIET, debug_level, "Evidence "
 				  "of third nucleotide, will not genotype this"
-				  "site (%c=%zu, %c=%zu, %c=%zu).  To change the "
-				  "behavior, see command-line option "
+				  "site (%c=%zu, %c=%zu, %c=%zu).  To change "
+				  "the behavior, see command-line option "
 				  "--biallelic\n", xy_to_char[nuc1], num_nuc1,
 				  xy_to_char[nuc2], num_nuc2,
 				  xy_to_char[nuc3], num_nuc3);
@@ -1668,20 +1650,20 @@ debug_msg(debug_level > DEBUG_I, debug_level, "Read %s (%u) cigar %u%c (%u), rd_
 				
 				if (!vcf_fp[i])
 					continue;
-				if (i == 0) {
-					fprintf(vcf_fp[i], "%s", rf_info->info[my_refs[0]].name_A);
-				} else
-					fprintf(vcf_fp[i], "%s", rf_info->info[my_refs[1]].name_B);
+				if (i == 0)
+					fprintf(vcf_fp[i], "%s", rf_info->name_A);
+				else
+					fprintf(vcf_fp[i], "%s", rf_info->name_B);
 				fprintf(vcf_fp[i], "\t%lu\t.\t%c\t", ref_pos[i] + 1,
-					iupac_to_char[ref_allele[i]]);
-				
-				if (xy_to_iupac[nuc1] != ref_allele[i]) {
+					iupac_to_char[ref_base[i]]);
+
+				if (xy_to_iupac[nuc1] != ref_base[i]) {
 					fprintf(vcf_fp[i], "%c",
 						xy_to_char[nuc1]);
 					one_alt = 1;
 				}
 				if (!no_alt_allele && nuc2 != nuc1
-					&& xy_to_iupac[nuc2] != ref_allele[i]) {
+					&& xy_to_iupac[nuc2] != ref_base[i]) {
 					if (one_alt)
 						fputc(',', vcf_fp[i]);
 					fprintf(vcf_fp[i], "%c",
@@ -1694,7 +1676,7 @@ debug_msg(debug_level > DEBUG_I, debug_level, "Read %s (%u) cigar %u%c (%u), rd_
 			}
 			continue;
 		}
-		
+
 		fprintf(stderr, "Observed nucleotides (%zu): ", n_cover);
 		for (unsigned int i = 0; i < n_cover; ++i)
 			fprintf(stderr, "%c", xy_to_char[obs_nuc[i]]);
@@ -1706,7 +1688,7 @@ debug_msg(debug_level > DEBUG_I, debug_level, "Read %s (%u) cigar %u%c (%u), rd_
 		fprintf(stderr, "\n");
 		
 		/* estimate posterior probability of each genotype */
-		/*mls.pos = posA - start_pos[0];*/
+		/*mls.pos = posA - start_target[0];*/
 		
 		double lprob[9], gprob[9];
 		double mprob = 0;
@@ -1727,6 +1709,8 @@ debug_msg(debug_level > DEBUG_I, debug_level, "Read %s (%u) cigar %u%c (%u), rd_
 							continue;
 						if (covers[n_read]) {
 							mls.pos = obs_rpos[n_cover];
+
+							/* log likelihood of A alignment */
 							tmp1a = sub_prob_given_q_with_encoding(
 											 ref_base[0],			/* homozygous ref base */
 											 obs_nuc[n_cover], IUPAC_ENCODING, XY_ENCODING, obs_q[n_cover], 1, (void *)&mls);
@@ -1736,15 +1720,19 @@ debug_msg(debug_level > DEBUG_I, debug_level, "Read %s (%u) cigar %u%c (%u), rd_
 											 : xy_to_iupac[nuc1] | xy_to_iupac[nuc2],
 											 obs_nuc[n_cover], IUPAC_ENCODING, XY_ENCODING, obs_q[n_cover], 1, (void *)&mls);
 							tmp1 = ll[0][n_read] - tmp1a + tmp1b;
+
 							/* log likelihood of B alignment */
-							/* [FIXED, KSD 2/14/22: obs_nuc is already reverse complemented if appropriate]
+							/* [BROKEN, KSD 2/14/22] [FIXED, KSD 2/20/22] obs_nuc
+							 * was reverse complemented to match subgenome A, but
+							 * ref_base[1] is still on reverse-complemented
+							 * subgenome B
+							 */
 							xy_t tmp = obs_nuc[n_cover];
-							if (rf_info->info[my_refs[1]].strand_B) //RC if B is reversed
+							if (rf_info->strand_B) //RC if B is reversed
 								tmp = xy_to_rc[obs_nuc[n_cover]];
-							*/
 							tmp2a = sub_prob_given_q_with_encoding(
 											 ref_base[1],			/* homozygous ref base */
-											 obs_nuc[n_cover], IUPAC_ENCODING, XY_ENCODING, obs_q[n_cover], 1, (void *)&mls);
+											 tmp, IUPAC_ENCODING, XY_ENCODING, obs_q[n_cover], 1, (void *)&mls);
 							tmp2b = sub_prob_given_q_with_encoding(
 											 !g2 ? xy_to_iupac[nuc1]	/* new genotype */
 											 : g2 == 2 ? xy_to_iupac[nuc2]
@@ -1754,7 +1742,12 @@ debug_msg(debug_level > DEBUG_I, debug_level, "Read %s (%u) cigar %u%c (%u), rd_
 							
 							/* combine assuming uniform prior */
 							lprob[g1 * 3 + g2] += log(exp(tmp1) + exp(tmp2));
-							//fprintf(stderr, "Ref base (%c, %c) -> Genotype (%c%c %d,%d); Read %zu (%c,%d): %f (%f-%f) vs. %f (%f-%f) (%f)\n", iupac_to_char[ref_base[0]], iupac_to_char[ref_base[1]], xy_to_char[nuc1], xy_to_char[nuc2], g1, g2, n_cover, xy_to_char[obs_nuc[n_cover]], obs_q[n_cover], tmp1, tmp1b, tmp1a, tmp2, tmp2b, tmp2a, lprob[g1 * 3 + g2]);
+							debug_msg(debug_level >= DEBUG_II, debug_level, "[Ref=%c, Alt=%c] Read %zu (%c,%d): Subgenome A %c%c -> %c%c M=(%d,%d): %f (%f-%f); Subgenome B %c%c -> %c%c M=(%d,%d): %f (%f-%f) (%f)\n", 
+								xy_to_char[nuc1], xy_to_char[nuc2], n_cover, xy_to_char[obs_nuc[n_cover]], obs_q[n_cover],
+								iupac_to_char[ref_base[0]], iupac_to_char[ref_base[0]],
+								g1<=1 ? xy_to_char[nuc1] : xy_to_char[nuc2], g1>=1 ? xy_to_char[nuc2] : xy_to_char[nuc1], g1, g2, tmp1, tmp1b, tmp1a,
+								iupac_to_char[ref_base[1]], iupac_to_char[ref_base[1]],
+								g2<=1 ? xy_to_char[nuc1] : xy_to_char[nuc2], g2>=1 ? xy_to_char[nuc2] : xy_to_char[nuc1], g1, g2, tmp2, tmp2b, tmp2a, lprob[g1 * 3 + g2]);
 							++n_cover;
 						}
 						++n_read;
@@ -1771,7 +1764,7 @@ debug_msg(debug_level > DEBUG_I, debug_level, "Read %s (%u) cigar %u%c (%u), rd_
 			for (int g1 = 0; g1 <= 2; ++g1)
 				for (int g2 = 0; g2 <= 2; ++g2) {
 					gprob[g1 * 3 + g2] /= den;
-					fprintf(stderr, "M = (%u, %u) %c%c at site (%zu, %zu): %e\n", g1, g2, xy_to_char[nuc1], xy_to_char[nuc2],  ref_pos[0] + 1, ref_pos[1] + 1, gprob[g1*3 + g2]);
+					fprintf(stderr, "M = (%u, %u) %c%c at site (%zu, %zu): %e\n", g1, g2, xy_to_char[nuc1], xy_to_char[nuc2], ref_pos[0] + 1, ref_pos[1] + 1, gprob[g1*3 + g2]);
 					if (gprob[g1*3 + g2] > mprob) {
 						mprob = gprob[g1*3 + g2];
 						g1_max = g1;
@@ -1900,28 +1893,15 @@ debug_msg(debug_level > DEBUG_I, debug_level, "Read %s (%u) cigar %u%c (%u), rd_
 			}
 		}
 		}
-		if (rf_info->info[my_refs[1]].strand_B) {
-			fprintf(stderr, "Genotype (%4zu, %4zu, %3zu, %3zu): %c%c/%c%c (%f) [",
-				target_a + 1, target_b + 1, target_a - start_pos[0], target_b - start_pos[1],
-				g1_max < 2 ? xy_to_char[nuc1] : xy_to_char[nuc2],
-				g1_max ? xy_to_char[nuc2] : xy_to_char[nuc1],
-				g2_max < 2 ? xy_to_char[nuc1] : xy_to_char[nuc2],
-				g2_max ? xy_to_char[nuc2] : xy_to_char[nuc1], mprob);
-			if (final_out)
-				fprintf(final_out, "%s  %s  %4zu	%4zu",
-						opt.ref_names[0], opt.ref_names[1], target_a + 1, target_b + 1);
-		} else {
-			fprintf(stderr, "Genotype (%4zu, %4zu, %3zu, %3zu): %c%c/%c%c (%f) [",
-				target_a + 1, target_b + 1, target_a - start_pos[0], target_b - start_pos[1],
-				g1_max < 2 ? xy_to_char[nuc1] : xy_to_char[nuc2],
-				g1_max ? xy_to_char[nuc2] : xy_to_char[nuc1],
-				g2_max < 2 ? xy_to_char[nuc1] : xy_to_char[nuc2],
-				g2_max ? xy_to_char[nuc2] : xy_to_char[nuc1], mprob);
-			if (final_out)
-				fprintf(final_out, "%s  %s  %4zu	%4zu",
-						opt.ref_names[0], opt.ref_names[1], target_a + 1, target_b + 1);
-		}
-		if (final_out)
+		fprintf(stderr, "Genotype (%4zu, %4zu, %3zu, %3zu): %c%c/%c%c (%f) [",
+			target_a + 1, target_b + 1, target_a - start_target[0], target_b - start_target[1],
+			g1_max < 2 ? xy_to_char[nuc1] : xy_to_char[nuc2],
+			g1_max ? xy_to_char[nuc2] : xy_to_char[nuc1],
+			g2_max < 2 ? xy_to_char[nuc1] : xy_to_char[nuc2],
+			g2_max ? xy_to_char[nuc2] : xy_to_char[nuc1], mprob);
+		if (final_out) {
+			fprintf(final_out, "%s  %s  %4zu	%4zu",
+					opt.ref_names[0], opt.ref_names[1], target_a + 1, target_b + 1);
 			fprintf(final_out, "	%c%c/%c%c   %c%c	%c%c   %c   %c",
 					g1_max < 2 ? xy_to_char[nuc1] : xy_to_char[nuc2],
 					g1_max ? xy_to_char[nuc2] : xy_to_char[nuc1],
@@ -1932,6 +1912,10 @@ debug_msg(debug_level > DEBUG_I, debug_level, "Read %s (%u) cigar %u%c (%u), rd_
 					g2_max < 2 ? xy_to_char[nuc1] : xy_to_char[nuc2],
 					g2_max ? xy_to_char[nuc2] : xy_to_char[nuc1],
 					nuc1, nuc2);
+		}
+
+		double prob_heterozygoteA = 0, prob_heterozygoteB = 0;
+		double prob_heterozygote[N_FILES] = {0, 0};	/* [KSD,TODO] Assumes N_FILES == 2 */
 
 		for (int g1 = 0; g1 <= 2; ++g1)
 			for (int g2 = 0; g2 <= 2; ++g2) {
@@ -1959,17 +1943,14 @@ debug_msg(debug_level > DEBUG_I, debug_level, "Read %s (%u) cigar %u%c (%u), rd_
 			: abs(g1_max - g2_max) > 1 ? "+++" : "");
 		fprintf(stderr, "prob_heterozygoteA %lf, prob_heterozygoteB %lf\n",
 			prob_heterozygoteA, prob_heterozygoteB);
-//		if (prob_heterozygoteA >= opt.min_genotype_post_prob)
-//			haplotypeA[n_segregatingA++] = target_a;
-//		if (prob_heterozygoteB >= opt.min_genotype_post_prob)
-//			haplotypeB[n_segregatingB++] = target_b;
 		int g_max[N_FILES] = {g1_max, g2_max};
 		double ect_pvals[N_FILES] = {1, 1};
 		if (opt.equal_homolog_coverage_test
 			&& (g_max[0] == 1 || g_max[1] == 1))
-				test_equal_homolog_coverage(mh, ll, ref_base,
-					covers, obs_nuc, obs_q, obs_rpos, g_max,
-					nuc1, nuc2, ect_pvals);
+				test_equal_homolog_coverage(mh, rf_info, ll,
+					ref_base, covers, obs_nuc, obs_q,
+					obs_rpos, g_max, nuc1, nuc2,
+					ect_pvals);
 		/* write out results to vcf files */
 		
 		for (int i = 0; i < N_FILES; ++i) {
@@ -1982,20 +1963,18 @@ debug_msg(debug_level > DEBUG_I, debug_level, "Read %s (%u) cigar %u%c (%u), rd_
 				? (1 - gprob[g_max[i]] - gprob[3 + g_max[i]] - gprob[6 + g_max[i]])
 				: (1 - gprob[3 * g_max[i] + 2] - gprob[3 * g_max[i] + 1] - gprob[3 * g_max[i]]);
 			
-			if (i == 0) {
-				fprintf(vcf_fp[i], "%s", rf_info->info[my_refs[0]].name_A);
-			} else {
-				fprintf(vcf_fp[i], "%s", rf_info->info[my_refs[1]].name_B);
-			}
+			if (i == 0)
+				fprintf(vcf_fp[i], "%s", rf_info->name_A);
+			else
+				fprintf(vcf_fp[i], "%s", rf_info->name_B);
 			fprintf(vcf_fp[i], "\t%lu\t.\t%c\t",
-			ref_pos[i] + 1, iupac_to_char[ref_allele[i]]);
-			
-			if (xy_to_iupac[nuc1] != ref_allele[i]) {
+				ref_pos[i] + 1, iupac_to_char[ref_base[i]]);
+			if (xy_to_iupac[nuc1] != ref_base[i]) {
 				fprintf(vcf_fp[i], "%c", xy_to_char[nuc1]);
 				one_alt = 1;
 			}
 			if (!no_alt_allele && nuc2 != nuc1
-				&& xy_to_iupac[nuc2] != ref_allele[i]) {
+				&& xy_to_iupac[nuc2] != ref_base[i]) {
 				if (one_alt)
 					fputc(',', vcf_fp[i]);
 				fprintf(vcf_fp[i], "%c", xy_to_char[nuc2]);
@@ -2003,7 +1982,7 @@ debug_msg(debug_level > DEBUG_I, debug_level, "Read %s (%u) cigar %u%c (%u), rd_
 			}
 			if (!one_alt)
 				fputc('.', vcf_fp[i]);
-			/* NOTE: Currently we are not output ALT alleles
+			/* NOTE: Currently we do not output ALT alleles
 			 * from the other subgenome.
 			 */
 			if (opt.posthoc_coverage_test && g_max[i] == 1 &&
@@ -2022,7 +2001,7 @@ debug_msg(debug_level > DEBUG_I, debug_level, "Read %s (%u) cigar %u%c (%u), rd_
 			fputc('\t', vcf_fp[i]);
 
 			/* reference allele is dominant allele */
-			if (xy_to_iupac[nuc1] == ref_allele[i]) {
+			if (xy_to_iupac[nuc1] == ref_base[i]) {
 				if (g_max[i] == 2)
 					fprintf(vcf_fp[i], "1/1");
 				else if (g_max[i] == 1)
@@ -2031,7 +2010,7 @@ debug_msg(debug_level > DEBUG_I, debug_level, "Read %s (%u) cigar %u%c (%u), rd_
 					fprintf(vcf_fp[i], "0/0");
 				
 				/* reference allele is subdominant allele */
-			} else if (xy_to_iupac[nuc2] == ref_allele[i]) {
+			} else if (xy_to_iupac[nuc2] == ref_base[i]) {
 				if (g_max[i] == 2)
 					fprintf(vcf_fp[i], "0/0");
 				else if (g_max[i] == 1)
@@ -2062,7 +2041,7 @@ debug_msg(debug_level > DEBUG_I, debug_level, "Read %s (%u) cigar %u%c (%u), rd_
 			}
 
 			/* use profile log likelihood */
-			if (xy_to_iupac[nuc1] == ref_allele[i]) {
+			if (xy_to_iupac[nuc1] == ref_base[i]) {
 				if (!i)
 					fprintf(vcf_fp[i], ":%.2f,%.2f,%.2f\n",
 						lprob[0 + g_max[1]] / log(10),
@@ -2073,7 +2052,7 @@ debug_msg(debug_level > DEBUG_I, debug_level, "Read %s (%u) cigar %u%c (%u), rd_
 						lprob[g_max[0]] / log(10),
 						lprob[g_max[0] + 1] / log(10),
 						lprob[g_max[0] + 2] / log(10));
-			} else if (xy_to_iupac[nuc2] == ref_allele[i]) {
+			} else if (xy_to_iupac[nuc2] == ref_base[i]) {
 				if (!i)
 					fprintf(vcf_fp[i], ":%.2f,%.2f,%.2f\n",
 						lprob[6 + g_max[1]] / log(10),
@@ -2098,28 +2077,24 @@ debug_msg(debug_level > DEBUG_I, debug_level, "Read %s (%u) cigar %u%c (%u), rd_
 			}
 		}
 		/* if heterozygous call with confidence record haplotype */
-		if (prob_heterozygote[0] >= opt.min_genotype_post_prob) {
-			haplotype_posns[0][n_segregatingA] = target_a;
-			hapA_prop[n_segregatingA] = ebaseA[modeA] / ecoverage[0];
-			hapA_covg[n_segregatingA] = ecoverage[0];
-			hapA_dom_nuc[n_segregatingA++] = modeA;
-		}
-		if (prob_heterozygote[1] >=  opt.min_genotype_post_prob) {
-			haplotype_posns[1][n_segregatingB] = target_b;
-			hapB_prop[n_segregatingB] = ebaseB[modeB] / ecoverage[1];
-			hapB_covg[n_segregatingB] = ecoverage[1];
-			hapB_dom_nuc[n_segregatingB++] = modeB;
+		if (opt.posthoc_coverage_test) {
+			if (prob_heterozygote[0] >= opt.min_genotype_post_prob) {
+				haplotype_posns[0][n_segregatingA] = target_a;
+				hapA_prop[n_segregatingA] = ebaseA[modeA] / ecoverage[0];
+				hapA_covg[n_segregatingA] = ecoverage[0];
+				hapA_dom_nuc[n_segregatingA++] = modeA;
+			}
+			if (prob_heterozygote[1] >=  opt.min_genotype_post_prob) {
+				haplotype_posns[1][n_segregatingB] = target_b;
+				hapB_prop[n_segregatingB] = ebaseB[modeB] / ecoverage[1];
+				hapB_covg[n_segregatingB] = ecoverage[1];
+				hapB_dom_nuc[n_segregatingB++] = modeB;
+			}
 		}
 	}
 	if (final_out)
 		fclose(final_out);
-/*
-fprintf(stderr, "Genotype A has %u segregating sites:", n_segregatingA);
-for (unsigned int, "\nGenotype B has %u segregating sites:", n_segregatingB);
-	for (unsigned int i = 0; i < n_segregatingB; ++i)
-		fprintf(stderr,  " %zu", haplotypeB[i]);
-	fprintf(stderr, "\n");
- */
+
 	for (unsigned int i = 0; i < N_FILES; ++i)
 		if (vcf_fp[i])
 			fclose(vcf_fp[i]);
@@ -2477,7 +2452,7 @@ double ll_align(sam_entry *se, unsigned int rd_id, unsigned char *ref,
 
 	debug_msg(fxn_debug >= DEBUG_II || show, fxn_debug, "Read = %u, "
 		  "Name = %s, Flag = %u, Pos = %u, Align. len = %u, Cigar = ",
-		  rd_id, se->name_s, se->flag, se->pos, align_len);
+		  rd_id, se->name, se->flag, se->pos, align_len);
 	for (unsigned int i = 0; i < se->cig->n_ashes; ++i)
 		debug_call(fxn_debug >= DEBUG_II || show, fxn_debug,
 			fprintf(stderr, "%u%c", se->cig->ashes[i].len,

@@ -26,8 +26,8 @@ void default_options_rf(options_rf *opt)
 {
 	opt->sam_file = NULL;
 	opt->filter_unmapped = 1;
-	opt->delim_ref = ":";
-	opt->delim_len = "-";
+	opt->delim_ref = ':';
+	opt->delim_len = '-';
 	opt->samtools_command = "samtools";
 	for (int i = 0; i < N_FILES; ++i) {
 		opt->rsam_files[i] = NULL;
@@ -49,305 +49,277 @@ void default_options_rf(options_rf *opt)
  *
  * @param opt		reference options object
  * @param ref_in	reference information object, to be created
+ * @param target_names	target names
  * @return		error status
  */
-int make_targets_info(options_rf opt, ref_info **ref_in)
+int make_targets_info(options_rf *opt, ref_info **ref_in,
+	char const **target_names)
 {
 	int fxn_debug = ABSOLUTE_SILENCE;//DEBUG_I;//
 	sam *sd_ref  = NULL;
-	FILE *fp = fopen(opt.sam_file, "r");
+	ref_info *rfi = NULL;
+	
+	FILE *fp = fopen(opt->sam_file, "r");
 
 	if (!fp)
-		exit(mmessage(ERROR_MSG, FILE_OPEN_ERROR, opt.sam_file));
+		exit(mmessage(ERROR_MSG, FILE_OPEN_ERROR, opt->sam_file));
 
-	read_sam(fp, &sd_ref);	/* assumes XY_ENCODING */
+	read_sam(fp, &sd_ref, 0, 0);	/* assumes XY_ENCODING */
 	fclose(fp);
 
-	ref_info *rf_info;
-	
-	*ref_in = malloc(sizeof **ref_in);
+	*ref_in = malloc(sizeof(**ref_in));
 	if (!*ref_in)
 		return mmessage(ERROR_MSG, MEMORY_ALLOCATION, "ref_in");
-	rf_info = *ref_in;
+	rfi = *ref_in;
 
 	/* get the length of each reference name */
-	size_t *rchar = NULL;
-	rchar = malloc(sd_ref->n_ref * sizeof(*rchar));
-	size_t rchar_in = 0;
-	for (unsigned int i = 0; i < sd_ref->n_ref; ++i) {
-		rchar[i] = rchar_in;
-		rchar_in += strlen(&sd_ref->ref_names[rchar_in]) + 1;
-	}
-	//
-	//	for (size_t i = 0; i < sd_ref->n_se; ++i) {
-	//		sam_entry *se = &sd_ref->se[i];
-	//		printf("%d\t", se->ref);
-	//		printf("%s %s\n", se->name, &sd_ref->ref_names[rchar[se->ref]]);
-	//	}
-	
+	int found = 0;
+
 	//store the name[include chrosome] and starting and ending positions in the targeted A, B genome
 	// i.e. split aradu.V14167.gnm2.chr02:696301-697301
-	ref_entry *re = malloc(sd_ref->n_se * sizeof *re);
-	
 	for (size_t i = 0; i < sd_ref->n_se; ++i) {
 		sam_entry *se = &sd_ref->se[i];
-
-		re[i].name_A = NULL;
-		re[i].name_B = NULL;
+		char const *rname = sd_ref->ref_names[se->ref];
 
 		/* filter unmapped */
-		if (opt.filter_unmapped && se->flag >> 2 & 1)
+		if (opt->filter_unmapped && se->flag >> 2 & 1)
 			continue;
+
+		if (strcmp(se->name, target_names[1]))
+			continue;
+
+		if (found)
+			exit(mmessage(ERROR_MSG, INVALID_USER_INPUT, "Target "
+				"'%s' has two primary alignments in '%s'\n",
+				target_names[1], opt->sam_file));
+		found = 1;
+
+		rfi->rf_idx = i;
+		rfi->name_A = NULL;
+		rfi->name_B = NULL;
 		
-		/* strand of A, B, in order to find the reads */
-//		re[i].strand_A = 0;
+		/* strand of B, in order to find the reads */
 		if ((se->flag & 16) == 0)
-			re[i].strand_B = 0;
+			rfi->strand_B = 0;
 		else
-			re[i].strand_B = 1;
+			rfi->strand_B = 1;
 
 		/* parse subgenome B csome name, start and end */
-		char temp_B[strlen(se->name) + 1];
-		strcpy(temp_B, se->name);
-		char *ptr_B = strtok(temp_B, opt.delim_ref);
-		re[i].name_B = malloc(strlen(ptr_B) + 1);
-		strcpy(re[i].name_B, ptr_B);
-		ptr_B = strtok(NULL, opt.delim_ref);
-		char *ptr_B_pos = strtok(ptr_B, opt.delim_len);
-		re[i].start_B = atoi(ptr_B_pos);
-		ptr_B_pos = strtok(NULL, opt.delim_len);
-		re[i].end_B = atoi(ptr_B_pos);
+		unsigned int idx_B = 0;
+		while (idx_B < strlen(se->name) && se->name[idx_B] != opt->delim_ref)
+			++idx_B;
+		if (!idx_B || idx_B == strlen(se->name) || idx_B == strlen(se->name) - 1)
+			exit(mmessage(ERROR_MSG, INVALID_USER_INPUT,
+				"Names are wrong format in SAM file of "
+				"subgenomic alignments!"));
+		rfi->name_B = malloc(idx_B + 1);
+		strncpy(rfi->name_B, se->name, idx_B);
+		rfi->name_B[idx_B] = '\0';
+		rfi->start_B = atoi(&se->name[++idx_B]);	/* 0-based, inclusive */
+		while (idx_B < strlen(se->name) && se->name[idx_B] != opt->delim_len)
+			++idx_B;
+		if (++idx_B >= strlen(se->name))
+			exit(mmessage(ERROR_MSG, INVALID_USER_INPUT,
+				"Names are wrong format in SAM file of "
+				"subgenomic alignments!"));
+		rfi->end_B = atoi(&se->name[idx_B]);		/* 0-based, exclusive */
 
 		debug_msg(fxn_debug >= DEBUG_I, fxn_debug,
-			  "name: %s start %zu end %zu\n", re[i].name_B,
-						re[i].start_B, re[i].end_B);
+			  "name: %s start %zu end %zu\n", rfi->name_B,
+						rfi->start_B, rfi->end_B);
 
 		/* parse subgenome A csome name, start and end */
-		char temp_A[strlen(&sd_ref->ref_names[rchar[se->ref]]) + 1];
-		strcpy(temp_A, &sd_ref->ref_names[rchar[se->ref]]);
-		char *ptr_A = strtok(temp_A, opt.delim_ref);
-		re[i].name_A = malloc(strlen(ptr_A) + 1);
-		strcpy(re[i].name_A, ptr_A);
-		ptr_A = strtok(NULL, opt.delim_ref);
-		char *ptr_A_pos = strtok(ptr_A, opt.delim_len);
-		re[i].start_A = atoi(ptr_A_pos);
-		ptr_A_pos = strtok(NULL, opt.delim_len);
-		re[i].end_A = atoi(ptr_A_pos);
+		unsigned int idx_A = 0;
+		while (idx_A < strlen(rname) && rname[idx_A] != opt->delim_ref)
+			++idx_A;
+		if (!idx_A || idx_A == strlen(se->name) || idx_A == strlen(se->name) - 1)
+			exit(mmessage(ERROR_MSG, INVALID_USER_INPUT,
+				"Names are wrong format in SAM file of "
+				"subgenomic alignments!"));
+		rfi->name_A = malloc(idx_A + 1);
+		strncpy(rfi->name_A, rname, idx_A);
+		rfi->name_A[idx_A] = '\0';
+		rfi->start_A = atoi(&rname[++idx_A]);	/* 0-based, inclusive */
+		while (idx_A < strlen(rname) && rname[idx_A] != opt->delim_len)
+			++idx_A;
+		if (++idx_A >= strlen(rname))
+			exit(mmessage(ERROR_MSG, INVALID_USER_INPUT,
+				"Names are wrong format in SAM file of "
+				"subgenomic alignments!"));
+		rfi->end_A = atoi(&rname[idx_A]);	/* 0-based, exclusive */
 
 		debug_msg(fxn_debug >= DEBUG_I, fxn_debug,
-			  "name: %s start %zu end %zu\n", re[i].name_A,
-						re[i].start_A, re[i].end_A);
+			  "name: %s start %zu end %zu\n", rfi->name_A,
+						rfi->start_A, rfi->end_B);
 
-		/* extract alignment start and end positions in subgenome A */
-//		re[i].real_sA = re[i].start_A + se->pos; // 1 based start_A
-//		re[i].real_eA = re[i].real_sA + se->cig->length_rf - 1;
-
-		/* length of subgenome B consumed in alignment */
-		size_t length = 0;
-		for (unsigned int m = 0; m < se->cig->n_ashes; ++m)
-			if (se->cig->ashes[m].type == CIGAR_INSERTION
-				|| se->cig->ashes[m].type == CIGAR_MATCH
-				|| se->cig->ashes[m].type == CIGAR_MMATCH
-				|| se->cig->ashes[m].type == CIGAR_MISMATCH)
-				length += se->cig->ashes[m].len;
-
-		/*   1    100               200  230
-		 * A -----|------^---vv-----|-----
-		 * B -----|    ----^-v------|-----------
-		 *   450  500  510          597        1087
-		 *
-		 * start_A = 100, end_A = 200
-		 * start_B = 500, end_B = 597
-		 * real_sA = 100, real_eA = 200
-		 * real_sB = 510, real_eB = 597
-		 *
-		 *        100               200
-		 * A -----|------^---vv-----|-----
-		 * B -----|    ----^-v------|----------- (reverse complemented)
-		 *   647  597  587          500        10
-		 *
-		 * start_A = 100, end_A = 200
-		 * start_B = 500, end_B = 597
-		 * real_sA = 100, real_eA = 200
-		 * real_sB = 500, real_eB = 587
-		 */
-
-//		if (re[i].strand_B) { // if B reversed
-//			fprintf(stderr, "Genome B is reverse complemented\n");
-//			re[i].real_eB = re[i].end_B;
-//			if (se->cig->ashes[se->cig->n_ashes - 1].type
-//							== CIGAR_SOFT_CLIP
-//				|| se->cig->ashes[se->cig->n_ashes - 1].type
-//							 == CIGAR_HARD_CLIP)
-//				re[i].real_eB -= se->cig->ashes[se->cig->n_ashes - 1].len;
-//			re[i].real_sB = re[i].real_eB - length + 1;
-//		} else {
-//			re[i].real_sB = re[i].start_B + 1; //1 based
-//			if (se->cig->ashes[0].type == CIGAR_SOFT_CLIP
-//				|| se->cig->ashes[0].type == CIGAR_HARD_CLIP)
-//				re[i].real_sB += se->cig->ashes[0].len;
-//			re[i].real_eB = re[i].real_sB + length - 1; // 1-based
-//		}
 	}
-	rf_info->info = re;
-	rf_info->ref_sam = sd_ref;
-	free(rchar);
+
+	if (!found)
+		exit(mmessage(ERROR_MSG, INVALID_USER_INPUT, "Target '%s' not "
+			"found aligned in '%s' SAM file.\n", target_names[1],
+			opt->sam_file));
+
+	rfi->ref_sam = sd_ref;
+
 	return NO_ERROR;
 }/* make_targets_info */
 
 /**
- * Find reads aligned to homeologous reference regions. The reads are aligned to
- * whole subgenome A and separately to whole subgenome B. We are focused on 
- * subsets of homeologous target regions. Here, we seek those reads that align
- * to any of these homoeologous regions.
+ * Exclude all reads not aligned to target regions and count the ones left in
+ * sam::n_per_ref.
+ *
+ * The reads are initially aligned to the whole genome to reduce paralogous
+ * read alignment, so the reference name in the sam file will just be a
+ * chromosome name. Thus, to find reads aligned to the target, they must both
+ * match the target chromosome and traverse the target region.
  *
  * @param ref_info	information about homoeologous aligned reference regions
  * @param opt		options about homeologous reference regions
- * @param sds		sam file objects of reads aligned to subgenomes
+ * @param sds		sam objects of reads aligned to each subgenome
+ * @param csome_names	names of chromosomes containing target region
  * @return		error status
  */
-int pickreads(ref_info *ref_info, options_rf *opt, sam **sds)
+int pickreads(ref_info *rfi, sam **sds, char const **csome_names)
 {
-	int fxn_debug = ABSOLUTE_SILENCE;//DEBUG_I;//
-	unsigned int i, j, m;
-	size_t *rchar[N_FILES];
+	//int fxn_debug = ABSOLUTE_SILENCE;//DEBUG_I;//
+	unsigned int j, m;
+	size_t n_unmapped = 0, n_not_target = 0;
 
-	/* get start index of each reference name */
+
+	/* find reads aligning to desired target */
 	for (j = 0; j < N_FILES; ++j) {
-		size_t rchar_in = 0;
+		//sds[j]->n_per_ref = calloc(1, sizeof(*sds[j]->n_per_ref));
+		//sds[j]->ref_list = malloc(sizeof(*sds[j]->ref_list));
 
-		rchar[j] = malloc(sds[j]->n_ref * sizeof **rchar);
-		
-		for (i = 0; i < sds[j]->n_ref; ++i) {
-			rchar[j][i] = rchar_in;
+		//if (!sds[j]->n_per_ref)
+		//	return mmessage(ERROR_MSG, MEMORY_ALLOCATION, "n_per_ref");
 
-			debug_msg(fxn_debug >= DEBUG_I, fxn_debug, "%zu %s\n",
-				rchar[j][i], &sds[j]->ref_names[rchar[j][i]]);
-			
-			rchar_in += strlen(&sds[j]->ref_names[rchar_in]) + 1;
-		}
-//		for (m = 0; m < sds[j]->n_se; ++m) {
-//			sam_entry *se = &sds[j]->se[m];
-//			if ((se->flag & (1 << 2)))
-//				continue;
-//			cigar *cig = se->cig;
-//			printf("%d: %zu ", m, cig->length_rf);
-//			printf("%s\t",  &sds[j]->ref_names[rchar[j][se->ref]]);
-//		}
-//		printf("\n");
-	}
-
-	/* find the reference region the read aligns to, if any */
-	for (j = 0; j < N_FILES; ++j) {
 		for (m = 0; m < sds[j]->n_se; ++m) {
 			sam_entry *se = &sds[j]->se[m];
+			char const *rname = NULL;
 			cigar *cig = se->cig;
 
-			/* [KSD, TODO] Restore which_ref to unsigned int.  Set se->exclude = 1 by default and unset here if you find a reference. Or if we may have already set exclude,
-			 * use a local found_ref = 0, and if you find no matching ref here, set se->exclude = 1.
-			 */
-			unsigned int found_ref = 0;
-//			se->which_ref = -1;
-//			se->ref_name = NULL;
-
 			/* skip unmapped reads */
-			if (se->flag & (1 << 2))
-				continue;
-
-			/* [TODO,KSD] slow; write a direct map or use htslib
-			 * to extract reads for each reference alignment; leave as is for now
-			 */
-			for (i = 0; i < ref_info->ref_sam->n_se; ++i) {
-				sam_entry *rse = &ref_info->ref_sam->se[i];
-				ref_entry *re = &ref_info->info[i];
-
-				/* search only primary reference alignments */
-				if (rse->flag >> 11 & 1)
-					continue;
-
-				char *ref_names[N_FILES] = {re->name_A, re->name_B};
-//				printf("%s %s\n ", ref_names[j], &sds[j]->ref_names[rchar[j][se->ref]]);
-
-				/* this read maps to this reference csome */
-				if (!strcmp(&sds[j]->ref_names[rchar[j][se->ref]], ref_names[j])) {
-					size_t start_pos[N_FILES] = {re->start_A, re->start_B};	// 0 based, inclusive (from chrom_name:start-end)
-					size_t end_pos[N_FILES] = {re->end_A, re->end_B};	// 1-based, inclusive (0-based, exclusive)
-					size_t rf_index_s = se->pos - 1;
-					size_t rf_index_e = rf_index_s + cig->length_rf;
-
-//					printf("%zu %zu || %zu %zu\n", rf_index_s, rf_index_e, start_pos[j], end_pos[j]);
-
-					/* and it maps within the target region */
-					if ((rf_index_s >= start_pos[j] && rf_index_e <= end_pos[j]) ||		/* read contained within target */
-					    (rf_index_s <= start_pos[j] && rf_index_e > start_pos[j]) ||	/* read crosses 5' end of target */
-					    (rf_index_s < end_pos[j] && rf_index_e >= end_pos[j])) {		/* read crosses 3' end of target */
-						size_t length = strlen(ref_names[j]) + strlen(opt->delim_len) + strlen(opt->delim_ref) + (int)(log10(end_pos[j]) + 1) + 1;
-
-						if (start_pos[j] != 0)
-							length += (int)(log10(start_pos[j]) + 1);
-						else
-							length += 1;
-						se->ref_name = malloc(length);
-						sprintf(se->ref_name, "%s%s%zu%s%zu", ref_names[j], opt->delim_ref, start_pos[j], opt->delim_len, end_pos[j]);
-						se->which_ref = i;
-						found_ref = 1;
-//						debug_msg(fxn_debug >= DEBUG_I, fxn_debug, "REF_ID: %d REF_NAME: %s \n", se->which_ref, se->ref_name);
-						break;
-					}
-				}
-			}
-			if (!found_ref) {
+			if (se->flag & (1 << 2)) {
+				++n_unmapped;
 				se->exclude = 1;
+				continue;
+			}
+
+			rname = sds[j]->ref_names[se->ref];
+//fprintf(stderr, "se->ref = %u\n", se->ref);
+//fprintf(stderr, "rname = %s\n", sds[j]->ref_names[se->ref]);
+
+			/* skip reads not mapping to target */
+			if (strcmp(rname, csome_names[j])) {
+				++n_not_target;
+				se->exclude = 1;
+				/* there could be many such reads! */
 				/*mmessage(INFO_MSG, NO_ERROR, "Read %s (%u) "
 					"excluded because it does not align to "
-					"one of references.\n", se->name_s, m);*/
+					"target.\n", se->name, m);*/
+				continue;
 			}
+
+			/* this read maps to this reference csome: allocate and assign a reference name for the target (NOT MEMORY EFFICIENT) */
+			if (!strcmp(rname, csome_names[j])) {
+				size_t start_pos[N_FILES] = {rfi->start_A, rfi->start_B};	/* 0 based, inclusive (from chrom_name:start-end in --ref_names and --geno file) */
+				size_t end_pos[N_FILES] = {rfi->end_A, rfi->end_B};	/* 0-based, exclusive */
+				size_t rf_index_s = se->pos - 1;			/* 0-based, inclusive */
+				size_t rf_index_e = rf_index_s + cig->length_rf;	/* 0-based, exclusive */
+
+//				printf("%zu %zu || %zu %zu\n", rf_index_s, rf_index_e, start_pos[j], end_pos[j]);
+
+				/* and it maps within the target region */
+				if ((rf_index_s >= start_pos[j] && rf_index_e <= end_pos[j]) ||	/* read contained within target */
+					(rf_index_s <= start_pos[j] && rf_index_e > start_pos[j]) ||	/* read crosses 5' end of target */
+					(rf_index_s < end_pos[j] && rf_index_e >= end_pos[j])) {	/* read crosses 3' end of target */
+
+					//++sds[j]->n_per_ref[0];
+					/* psych out hash_sam so correct read pairs hashed together */
+					if (j && rfi->strand_B) {
+						size_t lidx = strlen(se->name)-1;
+						se->name[lidx] = se->name[lidx] == '+' ? '-' : '+';
+					}
+					se->which_ref = 0;
+				}  else {
+					++n_not_target;
+					se->exclude = 1;
+				}
+			}
+					/* there could be many such reads! */
+					/*mmessage(INFO_MSG, NO_ERROR, "Read %s (%u) "
+						"excluded because it does not align to "
+						"target.\n", se->name, m);*/
+				/*
+					size_t length = strlen(rname) + 3
+						+ (int)(log10(end_pos[j]) + 1) + (int)(log10(start_pos[j]) + 1);
+
+					se->ref_name = malloc(length);
+					if (!se->ref_name)
+						return mmessage(ERROR_MSG, 
+							MEMORY_ALLOCATION, "ref_name");
+					sprintf(se->ref_name, "%s%s%zu%s%zu",
+						rname, opt->delim_ref,
+						start_pos[j], opt->delim_len,
+						end_pos[j]);
+					se->which_ref = rfi->ref_idx;
+//					debug_msg(fxn_debug >= DEBUG_I, fxn_debug, "REF_ID: %d REF_NAME: %s \n", se->which_ref, se->ref_name);
+				*/
 		}
 	}
 
-	for (j = 0; j < N_FILES; ++j)
-		free(rchar[j]);
+	mmessage(INFO_MSG, NO_ERROR, "Number of unmapped reads: %zu\n", n_unmapped);
+	mmessage(INFO_MSG, NO_ERROR, "Number of alignments not mapping to target: %zu\n", n_not_target);
 
 	return NO_ERROR;
 }/* pickreads */
 
 /**
- * Extract selected regions from fasta file. [Requires that someone ran samtools
- * faidx on the reference file previously.] Actually does not require this.
- *
- * TODO,KSD Check for prior run of faidx; provide helpful error message if not.
- *  I think samtools does not require index the reference files before extract the regions, if there is no index files, they will create one
+ * Extract selected regions from fasta file. Samtools uses region specification
+ * chr:from-to, where from and to are 1-based inclusive.
  *
  * @param samtools_command	samtools executable
- * @param region		samtools region specification: chr:from-to
+ * @param ref_name		name of target region
+ * @param ref_start		start of region, 0-based, inclusive
+ * @param ref_end		end of region, 0-based, exclusive
  * @param ref_file		fasta file to extract regions from
  * @param ext_rf		fasta file to write with chosen region
+ * @return			error status
  */
-void extract_ref(const char *samtools_command, char *region,
-				const char *ref_file, const char *ext_rf)
+int extract_ref(char const *samtools_command, char const *ref_name, size_t ref_start,
+		size_t ref_end, char const *ref_file, char const *ext_rf, options_rf *opt)
 {
+	FILE *fp;
+
 	// index the whole reference genome file
-	if (!ref_file)
+	if (!ref_file || !(fp = fopen(ref_file, "r")))
 		mmessage(ERROR_MSG, FILE_NOT_FOUND, "Reference file '%s' not found\n", ref_file);
-    
-	unsigned int cmd_len = strlen(samtools_command) + strlen(ref_file)
-		+ strlen(" faidx   -o ") + strlen(region) + strlen(ext_rf) + 1;
-	char *command = NULL;
+	fclose(fp);
+	
+	size_t cmd_len = strlen(samtools_command) + strlen(ref_file)
+		+ strlen(ref_name) + 2
+		+ (int)(log10(ref_start + 1) + 1) + (int)(log10(ref_end) + 1)
+		+ strlen(" faidx   -o ") + strlen(ext_rf) + 1;
 
 	mmessage(INFO_MSG, NO_ERROR, "Length of command: %u\n", cmd_len);
 
-	command = malloc(cmd_len * sizeof *command);	/* KSD,TODO,BUG Check for malloc() failure; this is a repeated TODO in many places. */
+	char *command = malloc(cmd_len * sizeof *command);
 	if (!command)
-		mmessage(ERROR_MSG, MEMORY_ALLOCATION, "samtools command");
+		return(mmessage(ERROR_MSG, MEMORY_ALLOCATION,
+						"samtools command"));
     
-	sprintf(command, "%s faidx %s %s -o %s",
-		samtools_command, ref_file, region, ext_rf);
+	sprintf(command, "%s faidx %s %s%c%zu%c%zu -o %s", samtools_command,
+		ref_file, ref_name, opt->delim_ref, ref_start + 1,
+		opt->delim_len, ref_end, ext_rf);
 	
 	mmessage(INFO_MSG, NO_ERROR, "Running samtools: '%s'\n", command);
 
 	system(command);
 
 	free(command);
+
+	return NO_ERROR;
 	
 }/* extract_ref */
 
@@ -366,10 +338,10 @@ int parse_rf_options(options_rf *opt, int argc, char *argv[])
 				opt->filter_unmapped = 0;
 				break;
 			case 'l':
-				opt->delim_len = argv[++argv_idx];
+				opt->delim_len = argv[++argv_idx][0];
 				break;
 			case 'r':
-				opt->delim_ref = argv[++argv_idx];
+				opt->delim_ref = argv[++argv_idx][0];
 				break;
 			case 'f':
 				opt->sam_file = argv[++argv_idx];
@@ -407,14 +379,23 @@ int parse_rf_options(options_rf *opt, int argc, char *argv[])
 	return 0;
 } /* parse_rf_options */
 
-// output the reads aligned to the target including the one not aligned to both
-void output_selected_reads(const char *f, sam **sds, merge_hash *mh) {
-	FILE *fpp = NULL;
-	fpp = fopen(f, "w");
+/**
+ * Output reads aligned to chosen target, including reads not aligned to both.
+ *
+ * @param f	output FASTA file
+ * @param sds	sam records of reads
+ * @param mh	merged sam records
+ */
+void output_selected_reads(char const *f, sam **sds, merge_hash *mh)
+{
+	FILE *fpp = fopen(f, "w");
+
 	if (!fpp)
 		exit(mmessage(ERROR_MSG, FILE_OPEN_ERROR, f));
+
 	for (merge_hash *me = mh; me != NULL; me = me->hh.next) {
 		sam_entry *se;
+
 		if (me->nfiles != N_FILES) {
 			if (me->indices[0])
 				se = &sds[0]->se[me->indices[0][0]];
@@ -484,7 +465,7 @@ int match_soft_clipping(merge_hash *mh, unsigned int nalign, sam **sds,
 			}
 		}
 
-		//debug_msg(fxn_debug >= DEBUG_I, fxn_debug, "Read %s 5' soft clip %u; 3' soft clip %u\n", sds[0]->se[me->indices[0][0]].name_s, fiveprime_sc, threeprime_sc);
+		debug_msg(fxn_debug >= DEBUG_I, fxn_debug, "Read %s 5' soft clip %u; 3' soft clip %u\n", sds[0]->se[me->indices[0][0]].name, fiveprime_sc, threeprime_sc);
 
 		for (unsigned int j = 0; j < nalign; ++j) {
 			sam_entry *se = &sds[j]->se[me->indices[j][0]];
@@ -494,7 +475,7 @@ int match_soft_clipping(merge_hash *mh, unsigned int nalign, sam **sds,
 				++n_reads_excluded;
 				mmessage(INFO_MSG, NO_ERROR, "Read %s excluded "
 					"by soft-clipping entire alignment in "
-					"subgenome %u.\n", se->name_s, j);
+					"subgenome %u.\n", se->name, j);
 				me->exclude = 1;
 				break;
 			}
@@ -545,7 +526,7 @@ int soft_clip_alignment(sam_entry *se, unsigned int fiveprime_sc,
 			unsigned int idx = 0;
 			int n_ashes = se->cig->ashes[0].type == CIGAR_SOFT_CLIP ? 0 : 1;
 
-debug_msg(fxn_debug >= DEBUG_I, fxn_debug, "Read %s with cigar ", se->name_s);
+debug_msg(fxn_debug >= DEBUG_I, fxn_debug, "Read %s with cigar ", se->name);
 debug_call(fxn_debug >= DEBUG_I, fxn_debug, print_cigar(stderr, se));
 debug_msg_cont(fxn_debug >= DEBUG_I, fxn_debug, " to be soft-clip extended from %u to %u on left side\n", len, prime_sc);
 
@@ -608,7 +589,7 @@ debug_msg_cont(fxn_debug >= DEBUG_I, fxn_debug, "\n");
 			unsigned int idx = lidx;
 			int n_ashes = se->cig->ashes[lidx].type == CIGAR_SOFT_CLIP ? 0 : 1;
 
-debug_msg(fxn_debug >= DEBUG_I, fxn_debug, "Read %s with cigar ", se->name_s);
+debug_msg(fxn_debug >= DEBUG_I, fxn_debug, "Read %s with cigar ", se->name);
 debug_call(fxn_debug >= DEBUG_I, fxn_debug, print_cigar(stderr, se));
 debug_msg_cont(fxn_debug >= DEBUG_I, fxn_debug, " to be soft-clip extended from %u to %u on right side\n", len, prime_sc);
 
@@ -752,7 +733,7 @@ int match_extent(merge_hash *mh, unsigned int nalign, sam **sds,
 			me->exclude = 1;
 			mmessage(INFO_MSG, NO_ERROR, "Read %s excluded because "
 				"it does not align to reference [this should "
-				"not happen!].\n", sds[0]->se[me->indices[0][0]].name_s);
+				"not happen!].\n", sds[0]->se[me->indices[0][0]].name);
 			continue;
 		}
 
@@ -1080,7 +1061,7 @@ int match_extent(merge_hash *mh, unsigned int nalign, sam **sds,
 
 			if (fxn_debug >= DEBUG_I) {
 				debug_msg_cont(fxn_debug >= DEBUG_I, fxn_debug,
-					"\tread %s new cigar: ", se->name_s);	/* TODO,KSD just use name */
+					"\tread %s new cigar: ", se->name);	/* TODO,KSD just use name */
 				for (unsigned int i = 0; i < n_ashes; ++i)
 					debug_msg_cont(fxn_debug >= DEBUG_I,
 						fxn_debug, "%u%c",
@@ -1123,90 +1104,22 @@ int match_extent(merge_hash *mh, unsigned int nalign, sam **sds,
 	return NO_ERROR;
 } /* match_extent */
 
-void delta_position(ref_info *rf_info, size_t ref_id)
-{
-	ref_entry *re = &rf_info->info[ref_id];
-	sam_entry *se = &rf_info->ref_sam->se[ref_id];
-	unsigned int rd_idx = 0;
-
-	size_t length = re->end_A - re->start_A;
-
-	if (!length)
-		return;
-
-	re->delta_len = calloc(length, sizeof(*re->delta_len));
-
-	/* first ash */
-	if (se->cig->ashes[0].type == CIGAR_SOFT_CLIP ||
-		se->cig->ashes[0].type == CIGAR_HARD_CLIP) {
-		rd_idx += se->cig->ashes[0].len;
-		re->delta_len[rd_idx] = se->pos - se->cig->ashes[0].len;
-	} else if (se->cig->ashes[0].type == CIGAR_MATCH
-		   || se->cig->ashes[0].type == CIGAR_MMATCH
-		   || se->cig->ashes[0].type == CIGAR_MISMATCH) {
-		rd_idx += se->cig->ashes[0].len;
-	} else if (se->cig->ashes[0].type == CIGAR_INSERTION) {
-		for (unsigned int j = 0; j <= se->cig->ashes[0].len; ++j)	/* include first nucleotide in next ash */
-			re->delta_len[j] -= j + 1;
-		rd_idx += se->cig->ashes[0].len;
-	} else if (se->cig->ashes[0].type == CIGAR_DELETION) {
-		re->delta_len[0] = se->cig->ashes[0].len;
-	}
-
-	for (unsigned int i = 1; i < se->cig->n_ashes; ++i) {
-		if (se->cig->ashes[i].type == CIGAR_SOFT_CLIP ||	/* 3' clip */
-			se->cig->ashes[i].type == CIGAR_HARD_CLIP) {
-			for (unsigned int j = 1; j < se->cig->ashes[i].len; ++j)
-				re->delta_len[rd_idx + j] = re->delta_len[rd_idx];
-			rd_idx += se->cig->ashes[i].len;
-		} else if (se->cig->ashes[i].type == CIGAR_MATCH
-			   || se->cig->ashes[i].type == CIGAR_MMATCH
-			   || se->cig->ashes[i].type == CIGAR_MISMATCH) {
-			for (unsigned int j = 1; j < se->cig->ashes[i].len; ++j)
-				re->delta_len[rd_idx + j] = re->delta_len[rd_idx];
-			rd_idx += se->cig->ashes[i].len;
-		} else if (se->cig->ashes[i].type == CIGAR_INSERTION) {
-			for (unsigned int j = 0; j < se->cig->ashes[i].len; ++j)
-				re->delta_len[rd_idx + j] = re->delta_len[rd_idx] - j - 1;
-			rd_idx += se->cig->ashes[i].len;
-		}
-		if (i + 1 < se->cig->n_ashes) {	/* pass to first nucleotide of next ash */
-			if (se->cig->ashes[i].type == CIGAR_DELETION)
-				re->delta_len[rd_idx] += se->cig->ashes[i].len;
-			else
-				re->delta_len[rd_idx] = re->delta_len[rd_idx - 1];
-		}
-	}
-} /* delta_position */
-
 // find homology position pair for the selected reference, -1 means not mapped (or deletion in B)
 // notice the read (NUC) given by mummer is not reversed complemented even if the flag shows it is
-void match_pair(ref_info *rf_info, size_t ref_id)
+void match_pair(ref_info *rfi)
 {
-	sam *sd_ref = rf_info->ref_sam;
-	sam_entry *se = &sd_ref->se[ref_id];
-	ref_entry *re = &rf_info->info[ref_id];
+	sam_entry *se = &rfi->ref_sam->se[rfi->rf_idx];
 	size_t length = 0;
-	unsigned int rd_idx = 0;	/* index in reference 1 */
+	unsigned int rd_idx = 0;	/* 0-based index in reference 1 (B) */
 
-	// get the length of paired aligned reference  (length of reference)
-//	for (unsigned int i = 0; i < se->cig->n_ashes; ++i) {
-//		if (se->cig->ashes[i].type == CIGAR_SOFT_CLIP
-//		    || se->cig->ashes[i].type == CIGAR_HARD_CLIP
-//		    || se->cig->ashes[i].type == CIGAR_INSERTION
-//		    || se->cig->ashes[i].type == CIGAR_MATCH
-//		    || se->cig->ashes[i].type == CIGAR_MMATCH
-//		    || se->cig->ashes[i].type == CIGAR_MISMATCH)
-//			length += se->cig->ashes[i].len;
-//	}
 	// in this case, we ignore the insertion of B
-	length = re->end_A - re->start_A; // [start_A, end_A)
-	re->idx_map = malloc(length * sizeof(*re->idx_map));
+	length = rfi->end_A - rfi->start_A; // [start_A, end_A)
+	rfi->map_A_to_B = malloc(length * sizeof(*rfi->map_A_to_B));
 	
 	for (size_t j = 0; j < length; ++j)
-		re->idx_map[j] = -1;
+		rfi->map_A_to_B[j] = -1;
 	
-	int rf_idx = se->pos - 1; // 0-based
+	int rf_idx = se->pos - 1;	/* 0-based position in reference 0 (A) */
 	
 	for (unsigned int i = 0; i < se->cig->n_ashes; ++i) {
 		if (se->cig->ashes[i].type == CIGAR_SOFT_CLIP
@@ -1222,24 +1135,19 @@ void match_pair(ref_info *rf_info, size_t ref_id)
 			   || se->cig->ashes[i].type == CIGAR_MMATCH
 			   || se->cig->ashes[i].type == CIGAR_MISMATCH) {
 			for (unsigned int m = rf_idx; m < rf_idx + se->cig->ashes[i].len; ++m)
-				re->idx_map[m] = rd_idx + m - rf_idx;
+				rfi->map_A_to_B[m] = rd_idx + m - rf_idx;
 			rf_idx += se->cig->ashes[i].len;
 			rd_idx += se->cig->ashes[i].len;
 		}
 	}
-	size_t lengthb = re->end_B - re->start_B;
-//	if (se->cig->ashes[se->cig->n_ashes - 1].type == CIGAR_SOFT_CLIP
-//	    || se->cig->ashes[se->cig->n_ashes - 1].type == CIGAR_HARD_CLIP)
-//		lengthb -= se->cig->ashes[se->cig->n_ashes - 1].len;
-	if(re->strand_B) // if B reverse strand, then reverse mapping
+
+	size_t lengthb = rfi->end_B - rfi->start_B;
+
+	if (rfi->strand_B) // if B reverse strand, then reverse mapping
 		for (size_t j = 0; j < length; ++j)
-			if(re->idx_map[j] != -1)
-				re->idx_map[j] = lengthb - re->idx_map[j] - 1;
-//	fprintf(stderr, "2 references alignment map\n");
-//	for (size_t j = 0; j < length; ++j)
-//		fprintf(stderr, "%d ", re->idx_map[j]);
-//	fprintf(stderr, "\n");
-}
+			if (rfi->map_A_to_B[j] != -1)
+				rfi->map_A_to_B[j] = lengthb - rfi->map_A_to_B[j] - 1;
+} /* match_pair() */
 
 //void fprint_usage(FILE *fp, char const * const cmd, void *vopt)
 //{

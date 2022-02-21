@@ -948,6 +948,9 @@ int main(int argc, const char *argv[])
 					  "failed with error '%s' (%d).\n",
 					  opt_rf.extracted_rf[j], fastq_error_message(err),
 					  err));
+		if (remove(opt_rf.extracted_rf[j]))
+			exit(mmessage(ERROR_MSG, INTERNAL_ERROR, "Failed to "
+				"delete file '%s'\n", opt_rf.extracted_rf[j]));
 	}
 
 	/* compute posterior probability read from each subgenome;

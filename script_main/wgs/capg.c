@@ -59,6 +59,8 @@ unsigned int ns_key_len = 3 * sizeof(data_t) + sizeof(unsigned int);
 /**
  * Test equal coverage of homologous chromosomes.
  *
+ * [TODO] Assumes N_FILES is 2.
+ *
  * @param mh		merged hash of aligned reads
  * @param ref_info	reference information
  * @param ll		log likelihood of reads aligned to each subgenome
@@ -678,11 +680,11 @@ int main(int argc, const char *argv[])
 	int debug_level = QUIET;//ABSOLUTE_SILENCE;//MINIMAL;//DEBUG_I;//
 	int err = NO_ERROR;
 	int karin_version = 1;
-	fastq_data *fds[N_FILES] = {NULL, NULL};//, NULL, NULL};
-	unsigned int fs_index[N_FILES] = {0, 0};//, 0, 0}; // index of alignment to accept from subgenomic alignment file: currently assume there is one alignment per target, so these are not changed
-	sam *sds[N_FILES] = {NULL, NULL};
+	fastq_data *fds[N_FILES] = {NULL}; //{NULL, NULL};//, NULL, NULL};
+	unsigned int fs_index[N_FILES] = {0}; //{0, 0};//, 0, 0}; // index of alignment to accept from subgenomic alignment file: currently assume there is one alignment per target, so these are not changed
+	sam *sds[N_FILES] = {NULL}; //{NULL, NULL};
 	fastq_options fop = {.read_encoding = IUPAC_ENCODING, .read_names = 1};
-	sam_hash *by_name[N_FILES] = {NULL, NULL};//, NULL, NULL};
+	sam_hash *by_name[N_FILES] = {NULL}; // {NULL, NULL};//, NULL, NULL};
 	FILE *fp = NULL;
 	mlogit_stuff mls = {NULL, 0};
 	options_rf opt_rf;
@@ -706,7 +708,7 @@ int main(int argc, const char *argv[])
 	}
 
 	/* chromosome names */
-	char *csome_names[N_FILES];
+	char *csome_names[N_FILES] = {NULL};
 	for (unsigned int j = 0; j < N_FILES; ++j) {
 		size_t i = 0;
 
@@ -799,7 +801,7 @@ int main(int argc, const char *argv[])
 	/* merge reads for given reference */
 	merge_hash *mh = NULL;
 
-	size_t ref_indices[N_FILES] = {0,0};
+	size_t ref_indices[N_FILES] = {0}; //{0,0};
 	size_t n_read = hash_merge(&mh, N_FILES, sds, ref_indices);
 	debug_msg(debug_level > ABSOLUTE_SILENCE, debug_level, "Number of reads"
 		" aligned to target in AT LEAST one subgenome: %zu\n", n_read);
@@ -815,12 +817,14 @@ int main(int argc, const char *argv[])
 	/* exclude reads not aligned to both genomes;
 	 * identify extent of alignments on reference genome
 	 */
-	size_t start_reference[N_FILES];/* 0-based start of reference segment in each subgenome, inclusive */
-	size_t end_reference[N_FILES];	/* 0-based end of reference segment in each subgenome, exclusive */
+	size_t start_reference[N_FILES] = {SIZE_MAX};/* 0-based start of reference segment in each subgenome, inclusive */
+	size_t end_reference[N_FILES] = {0};	/* 0-based end of reference segment in each subgenome, exclusive */
+/*
 	for (unsigned int i = 0; i < N_FILES; ++i) {
 		start_reference[i] = SIZE_MAX;
 		end_reference[i] = 0;
 	}
+*/
 
 	n_read = 0;
 	for (merge_hash *me = mh; me != NULL; me = me->hh.next) {
@@ -896,8 +900,8 @@ int main(int argc, const char *argv[])
 	/* match soft-clips so likelihood computed from same data in all subgenomes */
 	match_soft_clipping(mh, N_FILES, sds, rf_info->strand_B);
 	
-	double **pp = malloc(N_FILES * sizeof(*pp));
-	double **ll = malloc(N_FILES * sizeof(*ll));
+	double *pp[N_FILES] = {NULL}; // = malloc(N_FILES * sizeof(*pp));
+	double *ll[N_FILES] = {NULL}; // = malloc(N_FILES * sizeof(*ll));
 
 	for (unsigned int j = 0; j < N_FILES; ++j) {
 
@@ -1224,21 +1228,23 @@ int main(int argc, const char *argv[])
 	size_t num_nuc1, num_nuc2, num_nuc3;
 	
 	/* open and write header of vcf files */
-	FILE *vcf_fp[N_FILES];
-	for (unsigned int i = 0; i < N_FILES; ++i) {
-		vcf_fp[i] = NULL;
-		if (opt.vcf_files[i])
-			vcf_fp[i] = fopen(opt.vcf_files[i], "w");
-		if (!vcf_fp[i])
-			mmessage(ERROR_MSG, FILE_OPEN_ERROR, opt.vcf_files[i]);
-		print_vcf_header(vcf_fp[i], opt.vcf_opt, opt.fsa_files[i],
-							 opt.sample_name);
-   	}
+	FILE *vcf_fp[N_FILES] = {NULL};
+	if (opt.vcf_files[0])
+		for (unsigned int i = 0; i < N_FILES; ++i) {
+			vcf_fp[i] = NULL;
+			if (opt.vcf_files[i])
+				vcf_fp[i] = fopen(opt.vcf_files[i], "w");
+			if (!vcf_fp[i])
+				mmessage(ERROR_MSG, FILE_OPEN_ERROR,
+							opt.vcf_files[i]);
+			print_vcf_header(vcf_fp[i], opt.vcf_opt, opt.fsa_files[i],
+								 opt.sample_name);
+		}
 	
 	/* store information for post-hoc tests of allelic coverage */
 	/* [BUG,KSD] no memory allocation checks */
 	size_t region_len = 0;
-	size_t *haplotype_posns[N_FILES];	/* positions of het calls */
+	size_t *haplotype_posns[N_FILES] = {NULL};	/* positions of het calls */
 	unsigned int n_segregatingA = 0, n_segregatingB = 0;
 	double *hapA_prop = NULL, *hapB_prop = NULL, *hapA_covg = NULL, *hapB_covg = NULL;
 	xy_t *hapA_dom_nuc = NULL, *hapB_dom_nuc = NULL;
@@ -1264,9 +1270,10 @@ int main(int argc, const char *argv[])
 		hapB_dom_nuc = calloc(region_len, sizeof *hapB_dom_nuc);
 	}
 
-	size_t start_target[N_FILES];
-	size_t end_target[N_FILES];
+	size_t start_target[N_FILES] = {0};
+	size_t end_target[N_FILES] = {0};
 
+	/* [TODO] Assumes N_FILES == 2 */
 	start_target[0] = rf_info->start_A;	/* 0-based, inclusive */
 	end_target[0] = rf_info->end_A;		/* 0-based, exclusive */
 	start_target[1] = rf_info->start_B;
@@ -1307,7 +1314,7 @@ int main(int argc, const char *argv[])
 			ebaseB[b] = 0;
 		}
 		size_t n_cover_A = 0;
-		char_t ref_base[N_FILES] = {IUPAC_A, IUPAC_A};	/* [KSD,TODO] Assumes N_FILES == 2 */
+		char_t ref_base[N_FILES] = {IUPAC_A}; //{IUPAC_A, IUPAC_A};
 		size_t ref_pos[N_FILES] = {target_a, target_b};	/* [KSD,TODO] Assumes N_FILES == 2 */
 
 		/* extract read position aligned to genome A */
@@ -1420,8 +1427,8 @@ int main(int argc, const char *argv[])
 				n_read, rf_info->strand_B ? " [rc B]" : "",
 				se->pos, se->cig->length_rf,
 				target_b, rf_idx);
-			debug_call(debug_level > ABSOLUTE_SILENCE, debug_level, print_cigar(stderr, se));
-			debug_msg_cont(debug_level > ABSOLUTE_SILENCE, debug_level, "\n");
+			debug_call(debug_level > DEBUG_I, debug_level, print_cigar(stderr, se));
+			debug_msg_cont(debug_level > DEBUG_I, debug_level, "\n");
 /**/
 
 			
@@ -1915,7 +1922,7 @@ int main(int argc, const char *argv[])
 		}
 
 		double prob_heterozygoteA = 0, prob_heterozygoteB = 0;
-		double prob_heterozygote[N_FILES] = {0, 0};	/* [KSD,TODO] Assumes N_FILES == 2 */
+		double prob_heterozygote[N_FILES] = {0}; // {0, 0};	/* [KSD,TODO] Assumes N_FILES == 2 */
 
 		for (int g1 = 0; g1 <= 2; ++g1)
 			for (int g2 = 0; g2 <= 2; ++g2) {
@@ -1943,8 +1950,8 @@ int main(int argc, const char *argv[])
 			: abs(g1_max - g2_max) > 1 ? "+++" : "");
 		fprintf(stderr, "prob_heterozygoteA %lf, prob_heterozygoteB %lf\n",
 			prob_heterozygoteA, prob_heterozygoteB);
-		int g_max[N_FILES] = {g1_max, g2_max};
-		double ect_pvals[N_FILES] = {1, 1};
+		int g_max[N_FILES] = {g1_max, g2_max};	/* [KSD, TODO] assumes N_FILES == 2 */
+		double ect_pvals[N_FILES] = {1}; // {1, 1};
 		if (opt.equal_homolog_coverage_test
 			&& (g_max[0] == 1 || g_max[1] == 1))
 				test_equal_homolog_coverage(mh, rf_info, ll,
@@ -2277,11 +2284,16 @@ int main(int argc, const char *argv[])
 		free(haplotype_cnt[1]);
 	}
 
-	for (unsigned int j = 0; j < N_FILES; ++j)
+	for (unsigned int j = 0; j < N_FILES; ++j) {
 		if (pp[j])
 			free(pp[j]);
+		if (ll[j])
+			free(ll[j]);
+	}
+/*
 	if (pp)
 		free(pp);
+*/
 	if (obs_nuc)
 		free(obs_nuc);
 	if (obs_q)

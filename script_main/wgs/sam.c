@@ -265,10 +265,10 @@ int read_sam(FILE *fp, sam **s_in, unsigned char append_strand_char, unsigned ch
 		}
 	}
 	if (c == EOF)
-		return mmessage(ERROR_MSG, FILE_FORMAT_ERROR, "premature eof");
+		return mmessage(ERROR_MSG, FILE_FORMAT_ERROR, "premature eof\n");
 	if (!s->n_ref)
 		return mmessage(ERROR_MSG, FILE_FORMAT_ERROR, "sam file must "
-				"include references, i.e. @SQ header lines");
+				"include references, i.e. @SQ header lines\n");
 	ungetc(c, fp);
 	while (!feof(fp)) {
 		++s->n_se;

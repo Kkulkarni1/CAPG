@@ -56,7 +56,6 @@ struct _sam_entry {			/* see VCF specification */
 	sequence *qual;			/* qualities of read */
 	cigar *cig;			/* CIGAR */
 	size_t pos;			/* POS */
-	size_t length_rf; 		/* consumed reference length */
 	double ll_aln;			/* alignment likelihood */
 	unsigned int which_ref; 	/* which external reference */
 	unsigned int index; 		/* index used to output data */

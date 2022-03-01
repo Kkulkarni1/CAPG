@@ -72,6 +72,13 @@ int make_targets_info(options_rf *opt, ref_info **ref_in,
 		return mmessage(ERROR_MSG, MEMORY_ALLOCATION, "ref_in");
 	rfi = *ref_in;
 
+	for (size_t j = 0; j < N_FILES; ++j) {
+		rfi->alignment_start[j] = SIZE_MAX;
+		rfi->alignment_end[j] = 0;
+		rfi->read_to_ref[j] = NULL;
+	}
+	rfi->read_len = 0;
+
 	/* get the length of each reference name */
 	int found = 0;
 
@@ -115,14 +122,17 @@ int make_targets_info(options_rf *opt, ref_info **ref_in,
 		rfi->name_B = malloc(idx_B + 1);
 		strncpy(rfi->name_B, se->name, idx_B);
 		rfi->name_B[idx_B] = '\0';
-		rfi->start_B = atoi(&se->name[++idx_B]);	/* 0-based, inclusive */
+		if (opt->legacy_region_specification)			/* command-line provides 0-based, inclusive */
+			rfi->start_B = atoi(&se->name[++idx_B]);	/* 0-based, inclusive */
+		else							/* command-line provides 1-based, incclusive */
+			rfi->start_B = atoi(&se->name[++idx_B]) - 1;	/* 0-based, inclusive */
 		while (idx_B < strlen(se->name) && se->name[idx_B] != opt->delim_len)
 			++idx_B;
 		if (++idx_B >= strlen(se->name))
 			exit(mmessage(ERROR_MSG, INVALID_USER_INPUT,
 				"Names are wrong format in SAM file of "
 				"subgenomic alignments!"));
-		rfi->end_B = atoi(&se->name[idx_B]);		/* 0-based, exclusive */
+		rfi->end_B = atoi(&se->name[idx_B]);		/* 0-based, exclusive or 1-based inclusive */
 
 		debug_msg(fxn_debug >= DEBUG_I, fxn_debug,
 			  "name: %s start %zu end %zu\n", rfi->name_B,
@@ -139,7 +149,10 @@ int make_targets_info(options_rf *opt, ref_info **ref_in,
 		rfi->name_A = malloc(idx_A + 1);
 		strncpy(rfi->name_A, rname, idx_A);
 		rfi->name_A[idx_A] = '\0';
-		rfi->start_A = atoi(&rname[++idx_A]);	/* 0-based, inclusive */
+		if (opt->legacy_region_specification)			/* command-line provides 0-based, inclusive */
+			rfi->start_A = atoi(&rname[++idx_A]);		/* 0-based, inclusive */
+		else							/* command-line provides 1-based, inclusive */
+			rfi->start_A = atoi(&rname[++idx_A]) - 1;	/* 0-based, inclusive */
 		while (idx_A < strlen(rname) && rname[idx_A] != opt->delim_len)
 			++idx_A;
 		if (++idx_A >= strlen(rname))
@@ -815,7 +828,7 @@ int match_extent(merge_hash *mh, unsigned int nalign, sam **sds,
 				debug_msg_cont(fxn_debug >= DEBUG_I, fxn_debug,
 						"%u%c", se->cig->ashes[i].len,
 					cigar_char[se->cig->ashes[i].type]);
-			debug_msg_cont(fxn_debug >= DEBUG_I, fxn_debug, " [%zu, %zu)\n", se->pos, se->length_rf);
+			debug_msg_cont(fxn_debug >= DEBUG_I, fxn_debug, " [%zu, %zu)\n", se->pos, se->cig->length_rf);
 
 			ash *new_ashes = se->cig->ashes;
 			if (diff_extent) {
@@ -1104,49 +1117,96 @@ int match_extent(merge_hash *mh, unsigned int nalign, sam **sds,
 	return NO_ERROR;
 } /* match_extent */
 
-// find homology position pair for the selected reference, -1 means not mapped (or deletion in B)
-// notice the read (NUC) given by mummer is not reversed complemented even if the flag shows it is
+/**
+ * Find homoloeologous positions for pair of aligned reference sequences at
+ * targeted region, -1, -2 means not mapped; -1 for indel, -2 for end gaps
+ *
+ * NOTE: the read (NUC) given by mummer is not reversed complemented even when
+ * the flag so indicates
+ *
+ * \A target
+ *  \ (pos)       2I           /
+ *   \____________  __________/
+ *   /------------------ -----\
+ *  / (soft clip)       1D     \ (soft clip)
+ *                               B target
+ * B_to_A (B not reverse complemented):
+ * B index =01234567890123456789-0123456 (length 27)
+ * A index ===345678901234--5678901234==
+ * A_to_B (B not reverse complemented):
+ * A index 012345678901234--567890123456 (length 27)
+ * B index ===234567890123456789-01234==
+ *
+ * B_to_A (B reverse complemented):
+ * B index =65432109876543210987-6543210
+ * A index ===345678901634--5678901234==
+ * A_to_B (B reverse complemented):
+ * A index 012345678901234--567890123456
+ * B index ===432109876543210987-65432==
+ * @param rfi	ref_inf object to fill with information
+ */
 void match_pair(ref_info *rfi)
 {
 	sam_entry *se = &rfi->ref_sam->se[rfi->rf_idx];
-	size_t length = 0;
-	unsigned int rd_idx = 0;	/* 0-based index in reference 1 (B) */
+	size_t length = rfi->end_A - rfi->start_A;
+	size_t lengthb = rfi->end_B - rfi->start_B;
+	size_t rd_idx = 0;	/* 0-based index in reference 1 (B) */
 
 	// in this case, we ignore the insertion of B
-	length = rfi->end_A - rfi->start_A; // [start_A, end_A)
 	rfi->map_A_to_B = malloc(length * sizeof(*rfi->map_A_to_B));
+	rfi->map_B_to_A = malloc(lengthb * sizeof(*rfi->map_B_to_A));
 	
 	for (size_t j = 0; j < length; ++j)
-		rfi->map_A_to_B[j] = -1;
+		rfi->map_A_to_B[j] = -2;
+	for (size_t j = 0; j < lengthb; ++j)
+		rfi->map_B_to_A[j] = -2;
 	
-	int rf_idx = se->pos - 1;	/* 0-based position in reference 0 (A) */
+	size_t rf_idx = se->pos - 1;	/* 0-based position in reference 0 (A) */
 	
 	for (unsigned int i = 0; i < se->cig->n_ashes; ++i) {
 		if (se->cig->ashes[i].type == CIGAR_SOFT_CLIP
 		   || se->cig->ashes[i].type == CIGAR_HARD_CLIP) { /* though HC does not consume read, we include it in the targeted genomes alignments since length info in the name is used */
 			rd_idx += se->cig->ashes[i].len;
-			continue;
-		} else if (se->cig->ashes[i].type == CIGAR_DELETION
-			    || se->cig->ashes[i].type == CIGAR_SKIP) {
+		} else if (se->cig->ashes[i].type == CIGAR_SKIP) {
+		} else if (se->cig->ashes[i].type == CIGAR_DELETION) {
+			for (unsigned int m = 0; m < se->cig->ashes[i].len; ++m)
+				rfi->map_A_to_B[rf_idx + m] = -1;
 			rf_idx += se->cig->ashes[i].len;
 		} else if (se->cig->ashes[i].type == CIGAR_INSERTION) {
+			for (unsigned int m = 0; m < se->cig->ashes[i].len; ++m) {
+				if (rfi->strand_B)
+					rfi->map_B_to_A[lengthb - (rd_idx + m) - 1] = -1;
+				else
+					rfi->map_B_to_A[rd_idx + m] = -1;
+			}
 			rd_idx += se->cig->ashes[i].len;
 		} else if (se->cig->ashes[i].type == CIGAR_MATCH
 			   || se->cig->ashes[i].type == CIGAR_MMATCH
 			   || se->cig->ashes[i].type == CIGAR_MISMATCH) {
-			for (unsigned int m = rf_idx; m < rf_idx + se->cig->ashes[i].len; ++m)
-				rfi->map_A_to_B[m] = rd_idx + m - rf_idx;
+			for (unsigned int m = 0; m < se->cig->ashes[i].len; ++m) {
+				rfi->map_A_to_B[rf_idx + m] = rd_idx + m;
+				if (rfi->strand_B)
+					rfi->map_B_to_A[lengthb - (rd_idx + m) - 1] = rf_idx + m;
+				else
+					rfi->map_B_to_A[rd_idx + m] = rf_idx + m;
+			}
 			rf_idx += se->cig->ashes[i].len;
 			rd_idx += se->cig->ashes[i].len;
 		}
 	}
 
-	size_t lengthb = rfi->end_B - rfi->start_B;
 
 	if (rfi->strand_B) // if B reverse strand, then reverse mapping
 		for (size_t j = 0; j < length; ++j)
-			if (rfi->map_A_to_B[j] != -1)
+			if (rfi->map_A_to_B[j] >= 0)
 				rfi->map_A_to_B[j] = lengthb - rfi->map_A_to_B[j] - 1;
+
+/*
+	for (size_t j = 0; j < length; ++j)
+		fprintf(stderr, "A %zu -> B %d\n", j, rfi->map_A_to_B[j]);
+	for (size_t j = 0; j < lengthb; ++j)
+		fprintf(stderr, "B %zu -> A %d\n", j, rfi->map_B_to_A[j]);
+ */
 } /* match_pair() */
 
 //void fprint_usage(FILE *fp, char const * const cmd, void *vopt)

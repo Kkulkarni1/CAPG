@@ -77,6 +77,12 @@ struct _options {
 	unsigned char drop_secondary;	/*<! drop secondary alignments */
 	unsigned char equal_homolog_coverage_test; /*<! perform equal coverage test */
 	unsigned char posthoc_coverage_test;	/*<! perform post hoc coverage test */
+	/* this is how we ran CAPG: references are chrom:start-end,
+	 * where start, end are 0-based [inclusive, exclusive), but 
+	 * the default is now samtools format, where start, end are
+	 * 1-based, [inclusive, inclusive].
+	 */
+	unsigned char legacy_region_specification;
 };
 
 typedef struct nuc_state {

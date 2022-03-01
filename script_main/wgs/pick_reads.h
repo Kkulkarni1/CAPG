@@ -24,10 +24,11 @@ struct _ref_options {
 	char const *samtools_command;
 	char *extracted_rf[N_FILES]; 		// targeted reference fsa files
 	char const *fsa_files[N_FILES];	// reference fsa files
+	char const *fastq_file;
 	char filter_unmapped;
 	char delim_ref;
 	char delim_len;
-	char const *fastq_file;
+	unsigned char legacy_region_specification;
 };
 
 /**
@@ -39,12 +40,22 @@ struct _ref_info {
 	char *name_A;		/*<! name/csome of subgenome A */
 	char *name_B;		/*<! name/csome of subgenome B */
 	int *map_A_to_B; 	/*<! which base in B is aligned to each base in A within target region */
+	int *map_B_to_A; 	/*<! which base in A is aligned to each base in B within target region */
 
 	size_t rf_idx;		/*<! index of sam entry for selected target */
-	size_t start_A; 	/*<! selected homoeologous region in subgenome A, 1-based, inclusive */
-	size_t start_B;		/*<! selected homoeologous region in subgenome B, 1-based, inclusive */
-	size_t end_A;		/*<! selected homoeologous region in subgenome A, 1-based, exclusive */
-	size_t end_B;		/*<! selected homoeologous region in subgenome B, 1-based, exclusive */
+	size_t start_A; 	/*<! target region in subgenome A, 0-based, inclusive */
+	size_t start_B;		/*<! target region in subgenome B, 0-based, inclusive */
+	size_t end_A;		/*<! target region in subgenome A, 0-based, exclusive */
+	size_t end_B;		/*<! target region in subgenome B, 0-based, exclusive */
+/* better names for the above */
+//	size_t target_start_A;	/*<! 0-based, inclusive start of target region in subgenome A */
+//	size_t target_start_B;	/*<! 0-based, inclusive start of target region in subgenome B */
+//	size_t target_end_A;	/*<! 0-based, exclusive end of target region in subgenome A */
+//	size_t target_end_B;	/*<! 0-based, exclusive end of target region in subgenome B */
+	size_t alignment_start[N_FILES];	/*<! 0-based, inclusive start of alignment-covered region in subgenome A */
+	size_t alignment_end[N_FILES];	/*<! 0-based, exclusive start of alignment-covered region in subgenome A */
+	int *read_to_ref[N_FILES];
+	size_t read_len;
 	unsigned int strand_B;
 
 	//ref_entry *info;

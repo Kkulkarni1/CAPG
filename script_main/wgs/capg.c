@@ -2696,8 +2696,8 @@ debug_msg_cont(fxn_debug>=DEBUG_II, fxn_debug, " -> rf_idxB=%d)\n",
 				int other_rf_idx = sg_id	/* alternative reference alignment position */
 						? rfi->map_A_to_B[rfi->read_to_ref[!sg_id][other_rd_idx]]
 						: rfi->map_B_to_A[rfi->read_to_ref[!sg_id][other_rd_idx]];
-			if ((!sg_id && arf_idx >= rfi->start_A					/* read alignment to A */
-				&& arf_idx < rfi->end_A						/* read nuc aligned in target region */
+			if ((!sg_id && arf_idx >= rfi->start_A					/* read nuc aligned to A */
+				&& arf_idx < rfi->end_A						/* in target region */
 				&& rfi->map_A_to_B[arf_idx - rfi->start_A] == -1		/* in A insertion (or B deletion) */
 				&& rfi->read_to_ref[!sg_id][other_rd_idx] != -1			/* but read nuc IS aligned in B alignment */
 				&& (rfi->map_B_to_A[rfi->read_to_ref[!sg_id][other_rd_idx]]	/* and maps ahead to ref nuc not yet consumed */
@@ -2707,7 +2707,7 @@ debug_msg_cont(fxn_debug>=DEBUG_II, fxn_debug, " -> rf_idxB=%d)\n",
 				|| (sg_id && arf_idx >= rfi->start_B				/* read alignment to B */
 				&& arf_idx < rfi->end_B						/* read nuc aligned in target region */
 				&& rfi->map_B_to_A[arf_idx - rfi->start_B] == -1		/* in B insertion (or A deletion) */
-				&& rfi->read_to_ref[!sg_id][other_rd_idx] != 1			/* but read nuc IS aligned in A alignment */
+				&& rfi->read_to_ref[!sg_id][other_rd_idx] != -1			/* but read nuc IS aligned in A alignment */
 				&& (rfi->map_A_to_B[rfi->read_to_ref[!sg_id][other_rd_idx]]	/* and maps ahead to ref nuc not yet consumed */
 					> (int)(arf_idx - rfi->start_B)
 				|| rfi->map_A_to_B[rfi->read_to_ref[!sg_id][other_rd_idx]]	/* or behind to ref nuc that was not consumed */

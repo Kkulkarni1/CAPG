@@ -747,7 +747,7 @@ int main(int argc, const char *argv[])
 	for (unsigned int j = 0; j < N_FILES; ++j) {
 		
 		hash_sam(sds[j], &by_name[j], HASH_REFERENCE, 1, //my_refs[j], rf_info->ref_sam->n_se,
-			opt.drop_unmapped, opt.drop_secondary,
+			opt.drop_unmapped, opt.drop_secondary, opt.drop_supplementary,
 			opt.drop_soft_clipped, opt.drop_indel, opt.min_length,
 			opt.max_length, opt.max_eerr);
 		
@@ -3007,7 +3007,8 @@ int default_options(options *opt)
 {
 	opt->display_alignment = 0;
 	opt->drop_unmapped = 1;
-	opt->drop_secondary = 1;
+	opt->drop_secondary = 0;
+	opt->drop_supplementary = 1;
 	opt->drop_soft_clipped = UINT_MAX;
 	opt->drop_indel = UINT_MAX;
 	opt->proptest_screen = 0;
@@ -3269,6 +3270,11 @@ int parse_options_capg(options *opt, int argc, const char **argv)
 				mmessage(INFO_MSG, NO_ERROR, "%s secondary "
 					 "alignments\n", opt->drop_secondary
 					 ? "Dropping" : "Keeping");
+			} else if (!strncmp(&argv[i][j], "su", 2)) {
+				opt->drop_supplementary = !opt->drop_supplementary;
+				mmessage(INFO_MSG, NO_ERROR, "%s supplementary "
+					 "alignments\n", opt->drop_supplementary
+					 ? "Dropping" : "Keeping");
 			} else if (!strncmp(&argv[i][j], "so", 2)) {
 				opt->drop_soft_clipped
 					= read_uint(argc, argv, ++i, opt);
@@ -3383,7 +3389,7 @@ void fprint_usage(FILE *fp, const char *cmdname, void *obj) {
 		"<fsa1> <fsa2> --ref_names <sref1> <sref2> --g <refsam> --j <reffsa>\n\t\t"
 		"[--vcf_files --min-subgenomic-coverage <dbl>]\n\t\t"
 		"[--min <int> --max <int> --expected-errors <dbl> --indel <int> --loglike <dbl>"
-		" --secondary --soft-clipped <int> --coverage <dbl>]\n\t\t"
+		" --secondary --supplementary --soft-clipped <int> --coverage <dbl>]\n\t\t"
 //		"[--p <int> --amp <exe> [--ampliclust-f <ffastq> --ampliclust-o <str> --ampliclust-l <dbl>]]\n\t\t"
 		"[ --o <fout> --error_file|--error_data <ferr>] ...]\n",
 		&cmdname[start]);
@@ -3479,6 +3485,8 @@ void fprint_usage(FILE *fp, const char *cmdname, void *obj) {
 		"%u)\n", opt->max_length);
 	fprintf(fp, "\t--secondary\n\t\tDrop secondary alignments (Default: "
 		"%s)\n", opt->drop_secondary ? "yes" : "no");
+	fprintf(fp, "\t--supplementary\n\t\tDrop supplementary alignments (Default: "
+		"%s)\n", opt->drop_supplementary ? "yes" : "no");
 	fprintf(fp, "\t--coverage <c>\n\t\tTuning parameter for penalty (Default: %.1f).\n", opt->weight_penalty);
 	/* hide legacy CI
 	fprintf(fp, "\t--eq\n\t\tPost-hoc test of equal "

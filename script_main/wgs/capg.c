@@ -951,7 +951,7 @@ int main(int argc, const char *argv[])
 					  "failed with error '%s' (%d).\n",
 					  opt_rf.extracted_rf[j], fastq_error_message(err),
 					  err));
-		rfi->ref[j] = &fds[j]->reads[fs_index[j]];
+		rf_info->ref[j] = &fds[j]->reads[fs_index[j]];
 		if (remove(opt_rf.extracted_rf[j]))
 			exit(mmessage(ERROR_MSG, INTERNAL_ERROR, "Failed to "
 				"delete file '%s'\n", opt_rf.extracted_rf[j]));
@@ -2526,9 +2526,9 @@ double ll_align(ref_info *rfi, unsigned int sg_id, sam_entry *se,
 			if (try_alternative_alignment) {
 				size_t arf_idx = rf_index + rfi->alignment_start[sg_id];
 				if ((!sg_id && arf_idx >= rfi->start_A		/* read nuc aligned to A */
-					&& arf_idx < rfi->end_A))		/* in target region */
+					&& arf_idx < rfi->end_A)		/* in target region */
 					|| (sg_id && arf_idx >= rfi->start_B	/* or to B */
-					&& arf_idx < rfi->end_B))) {		/* in target region */
+					&& arf_idx < rfi->end_B)) {		/* in target region */
 					for (size_t j = 0; j < se->cig->ashes[i].len; ++j) {
 						size_t other_rd_idx = rfi->strand_B ? se->read->len - rd_index - j - 1 : rd_index + j;
 						int other_rf_idx = sg_id	/* alternative reference alignment position */
@@ -2575,7 +2575,7 @@ double ll_align(ref_info *rfi, unsigned int sg_id, sam_entry *se,
 
 		/* matches */
 		for (size_t j = 0; j < se->cig->ashes[i].len; ++j) {
-			unsigned int arf_index = rf_index + j + rfi->alignment_start[sg_id]
+			unsigned int arf_index = rf_index + j + rfi->alignment_start[sg_id];
 			/* score this aligned read position unless it is covering an indel difference between subgenomes */
 /*
 */

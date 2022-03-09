@@ -50,7 +50,6 @@
 
 
 double ll_align(ref_info *rfi, unsigned int sg_id, sam_entry *se, unsigned int i, unsigned char *ref, mlogit_stuff *vptr, unsigned char *show, size_t start_rf, int debug);
-int index_read_to_ref(ref_info *rfi, sam *sds[N_FILES], merge_hash *me);
 int update_vcf(options *opt, int *fail[N_FILES], size_t *hpos[N_FILES]);
 uint64_t get_haplotype_id(sam_entry *se, size_t *haplotype, unsigned int n_segregating);
 int test_equal_homolog_coverage(merge_hash *mh, ref_info *rfi, double **ll, char_t ref_base[N_FILES], char *covers, xy_t *obs_nuc, qual_t *obs_q, unsigned int *obs_rpos, int g_max[N_FILES], xy_t nuc1, xy_t nuc2, double pvals[N_FILES]);
@@ -952,6 +951,7 @@ int main(int argc, const char *argv[])
 					  "failed with error '%s' (%d).\n",
 					  opt_rf.extracted_rf[j], fastq_error_message(err),
 					  err));
+		rf_info->ref[j] = &fds[j]->reads[fs_index[j]];
 		if (remove(opt_rf.extracted_rf[j]))
 			exit(mmessage(ERROR_MSG, INTERNAL_ERROR, "Failed to "
 				"delete file '%s'\n", opt_rf.extracted_rf[j]));
@@ -2415,80 +2415,6 @@ uint64_t get_haplotype_id(sam_entry *se, size_t *haplotype,
 	return id;
 } /* get_haplotype_id */
 
-int index_read_to_ref(ref_info *rfi, sam *sds[N_FILES], merge_hash *me)
-{
-	sam_entry *se = &sds[0]->se[me->indices[0][0]];
-
-	/* (re)allocate space for mapping */
-	if (rfi->read_len != se->read->len) {
-		for (unsigned int j = 0; j < N_FILES; ++j) {
-			if (rfi->read_to_ref[j])
-				free(rfi->read_to_ref[j]);
-			rfi->read_to_ref[j] = malloc(se->read->len * sizeof(*rfi->read_to_ref[j]));
-			if (!rfi->read_to_ref[j])
-				exit(mmessage(ERROR_MSG, MEMORY_ALLOCATION, "ref_info::read_to_ref"));
-		}
-		rfi->read_len = se->read->len;
-	}
-
-	/* map read index to target index */
-	for (unsigned int j = 0; j < N_FILES; ++j) {
-		if (j)
-			se = &sds[j]->se[me->indices[j][0]];
-		//print_cigar(stderr, se);
-		//fprintf(stderr, "Alignment %u (%zu):", j, se->read->len);
-
-		size_t rf_idx = se->pos - 1;
-		size_t rd_idx = 0;
-
-		for (unsigned int i = 0; i < se->cig->n_ashes; ++i) {
-			if (se->cig->ashes[i].type == CIGAR_DELETION) {
-				rf_idx += se->cig->ashes[i].len;
-				continue;
-			} else if (se->cig->ashes[i].type == CIGAR_SOFT_CLIP) {
-				for (unsigned int k = 0; k < se->cig->ashes[i].len; ++k) {
-					rfi->read_to_ref[j][rd_idx + k] = -1;	/* nowhere, but don't count */
-					//fprintf(stderr, " %zu=%d", rd_idx + k, rfi->read_to_ref[j][rd_idx + k]);
-				}
-				rd_idx += se->cig->ashes[i].len;
-				continue;
-			} else if (se->cig->ashes[i].type == CIGAR_INSERTION) {
-				for (unsigned int k = 0; k < se->cig->ashes[i].len; ++k) {
-					rfi->read_to_ref[j][rd_idx + k] = -1;	/* nowhere */
-					//fprintf(stderr, " %zu=%d", rd_idx + k, rfi->read_to_ref[j][rd_idx + k]);
-				}
-				rd_idx += se->cig->ashes[i].len;
-				continue;
-			} else if (se->cig->ashes[i].type == CIGAR_HARD_CLIP) {
-				continue;
-			} else if (se->cig->ashes[i].type != CIGAR_MATCH
-				   && se->cig->ashes[i].type != CIGAR_MISMATCH
-				   && se->cig->ashes[i].type != CIGAR_MMATCH) {
-				continue;
-			}
-
-			for (unsigned int k = 0; k < se->cig->ashes[i].len; ++k) {
-				/* position maps to target region */
-				if (!j && rf_idx + k >= (j ? rfi->start_B : rfi->start_A) && rf_idx + k < (j ? rfi->end_B : rfi->end_A))
-					rfi->read_to_ref[j][rd_idx + k] = rf_idx + k - (j ? rfi->start_B : rfi->start_A);
-				else if (!j)	/* outside target */
-					rfi->read_to_ref[j][rd_idx + k] = -1;
-				else if (j && rf_idx + k >= (j ? rfi->start_B : rfi->start_B) && rf_idx + k < (j ? rfi->end_B : rfi->end_A))
-					rfi->read_to_ref[j][rd_idx + k] = rf_idx + k - (j ? rfi->start_B : rfi->start_A);
-				else
-					rfi->read_to_ref[j][rd_idx + k] = -1;
-				//fprintf(stderr, " %zu=%d", rd_idx + k, rfi->read_to_ref[j][rd_idx + k]);
-			}
-			rd_idx += se->cig->ashes[i].len;
-			rf_idx += se->cig->ashes[i].len;
-		}
-		//fprintf(stderr, "\n");
-	}
-
-	return NO_ERROR;
-} /* index_read_to_ref */
-
-
 /**
  * Log likelihood of alignment.  Compute log likelihood of alignment
  * assuming quality scores are literal and all substitutions equally
@@ -2594,6 +2520,46 @@ double ll_align(ref_info *rfi, unsigned int sg_id, sam_entry *se,
 								MIN_ASCII_QUALITY_SCORE;
 					}
 				}
+			/* normally an insertion doesn't count, but perhaps there is
+			 * an alternate alignment where it would count
+			 */
+			if (try_alternative_alignment) {
+				size_t arf_idx = rf_index + rfi->alignment_start[sg_id];
+				if ((!sg_id && arf_idx >= rfi->start_A		/* read nuc aligned to A */
+					&& arf_idx < rfi->end_A)		/* in target region */
+					|| (sg_id && arf_idx >= rfi->start_B	/* or to B */
+					&& arf_idx < rfi->end_B)) {		/* in target region */
+					for (size_t j = 0; j < se->cig->ashes[i].len; ++j) {
+						size_t other_rd_idx = rfi->strand_B ? se->read->len - rd_index - j - 1 : rd_index + j;
+						int other_rf_idx = sg_id	/* alternative reference alignment position */
+								? rfi->map_A_to_B[rfi->read_to_ref[!sg_id][other_rd_idx]]
+								: rfi->map_B_to_A[rfi->read_to_ref[!sg_id][other_rd_idx]];
+						if ((!sg_id && rfi->read_to_ref[!sg_id][other_rd_idx] != -1	/* read nuc IS aligned to B alignment */
+							&& (other_rf_idx > (int) (arf_idx - rfi->start_A)	/* and maps ahead to ref nuc not yet consumed */
+							|| other_rf_idx > last_mapped_idx))			/* or behind to ref nuc that was not consumed */
+							||	
+							(sg_id && rfi->read_to_ref[!sg_id][other_rd_idx] != -1 /* read nuc IS aligned in A alignment */
+							&& (other_rf_idx > (int)(arf_idx - rfi->start_B)	/* and maps ahead to ref nuc not yet consumed */
+							|| other_rf_idx > last_mapped_idx))) {			/* or behind to ref nuc that was not consumed */
+								
+
+							mls->pos = rd_index + j;
+							/* alternative reference nucleotide */
+							iupac_t rn = ref[(size_t)other_rf_idx + (sg_id ? rfi->start_B : rfi->start_A) - rfi->alignment_start[sg_id]];
+							/* log likelihood of this alternative */
+							double llt = sub_prob_given_q_with_encoding(rn,
+								get_nuc(se->read, XY_ENCODING, rd_index + j),
+								IUPAC_ENCODING, XY_ENCODING,
+								get_qual(se->qual, rd_index + j), 1, (void *) mls);
+							ll_alt += llt;
+							if (mapped_rf_idx < 0)	/* starting alternative mapping */
+								mapped_rf_idx = other_rf_idx;
+							else			/* continuing alternative mapping */
+								++mapped_rf_len;
+						}
+					}
+				}
+			}
 			rd_index += se->cig->ashes[i].len;
 			continue;
 		} else if (se->cig->ashes[i].type == CIGAR_HARD_CLIP) {
@@ -2609,70 +2575,75 @@ double ll_align(ref_info *rfi, unsigned int sg_id, sam_entry *se,
 
 		/* matches */
 		for (size_t j = 0; j < se->cig->ashes[i].len; ++j) {
+			unsigned int arf_index = rf_index + j + rfi->alignment_start[sg_id];
 			/* score this aligned read position unless it is covering an indel difference between subgenomes */
 /*
 */
 if (fxn_debug && !sg_id) {
 debug_msg(fxn_debug>=DEBUG_II, fxn_debug, "sg=%u rc=%u rd_idx=%zu arf_idx=%zu Align [%zu, %zu) Target [%zu, %zu)",
 	sg_id, rfi->strand_B, rd_index + j,
-	rf_index + j + rfi->alignment_start[sg_id],
+	arf_index,
 	rfi->alignment_start[sg_id], rfi->alignment_end[sg_id],
 	rfi->start_A, rfi->end_A);
 debug_msg_cont(fxn_debug>=DEBUG_II, fxn_debug, " rrf_idxA=%d ->", 
-	rf_index + j + rfi->alignment_start[sg_id] >= rfi->start_A
-		&& rf_index + j + rfi->alignment_start[sg_id] < rfi->end_A ?
-		(int)(rf_index + j + rfi->alignment_start[sg_id] - rfi->start_A) : -1);
+	arf_index>= rfi->start_A
+		&& arf_index < rfi->end_A ?
+		(int)(arf_index - rfi->start_A) : -1);
 debug_msg_cont(fxn_debug>=DEBUG_II, fxn_debug, " rrf_idxB=%d",
-	rf_index + j + rfi->alignment_start[sg_id] >= rfi->start_A
-		&& rf_index + j + rfi->alignment_start[sg_id] < rfi->end_A ?
-	rfi->map_A_to_B[rf_index + j + rfi->alignment_start[sg_id] - rfi->start_A] : -2);
+	arf_index >= rfi->start_A && arf_index < rfi->end_A ?
+	rfi->map_A_to_B[arf_index - rfi->start_A] : -2);
 debug_msg_cont(fxn_debug>=DEBUG_II, fxn_debug, " (rrf_idxB=%d", rfi->read_to_ref[!sg_id][rfi->strand_B ? se->read->len - rd_index - j - 1 : rd_index + j]);
 debug_msg_cont(fxn_debug>=DEBUG_II, fxn_debug, " -> rf_idxA=%d)\n", 
 	rfi->read_to_ref[!sg_id][rfi->strand_B ? se->read->len - rd_index - j - 1 : rd_index + j] >= 0 ? rfi->map_B_to_A[rfi->read_to_ref[!sg_id][rfi->strand_B ? se->read->len - rd_index - j - 1 : rd_index + j]] : -1);
 } else if (fxn_debug>=DEBUG_II) {
 debug_msg(fxn_debug>=DEBUG_II, fxn_debug, "sg=%u rc=%u rd_idx=%zu arf_idx=%zu Align [%zu, %zu) Target [%zu, %zu)",
 	sg_id, rfi->strand_B, rd_index + j,
-	rf_index + j + rfi->alignment_start[sg_id],
+	arf_index,
 	rfi->alignment_start[sg_id], rfi->alignment_end[sg_id],
 	rfi->start_B, rfi->end_B);
 debug_msg_cont(fxn_debug>=DEBUG_II, fxn_debug, " rrf_idxB=%d ->", 
-	rf_index + j + rfi->alignment_start[sg_id] >= rfi->start_B
-		&& rf_index + j + rfi->alignment_start[sg_id] < rfi->end_B ?
-		(int)(rf_index + j + rfi->alignment_start[sg_id] - rfi->start_B) : -1);
+	arf_index >= rfi->start_B && arf_index < rfi->end_B ?
+		(int)(arf_index - rfi->start_B) : -1);
 debug_msg_cont(fxn_debug>=DEBUG_II, fxn_debug, " rrf_idxB=%d",
-	rf_index + j + rfi->alignment_start[sg_id] >= rfi->start_B
-		&& rf_index + j + rfi->alignment_start[sg_id] < rfi->end_B ?
-	rfi->map_A_to_B[rf_index + j + rfi->alignment_start[sg_id] - rfi->start_B] : -2);
+	arf_index >= rfi->start_B && arf_index < rfi->end_B ?
+	rfi->map_A_to_B[arf_index - rfi->start_B] : -2);
 debug_msg_cont(fxn_debug>=DEBUG_II, fxn_debug, " (rrf_idxA=%d", rfi->read_to_ref[!sg_id][rfi->strand_B ? se->read->len - rd_index - j - 1 : rd_index + j]);
 debug_msg_cont(fxn_debug>=DEBUG_II, fxn_debug, " -> rf_idxB=%d)\n", 
 	rfi->read_to_ref[!sg_id][rfi->strand_B ? se->read->len - rd_index - j - 1 : rd_index + j] >= 0 ? rfi->map_A_to_B[rfi->read_to_ref[!sg_id][rfi->strand_B ? se->read->len - rd_index - j - 1 : rd_index + j]] : -1);
 }
-			if ((!sg_id && (rf_index + j + rfi->alignment_start[sg_id] < rfi->start_A
-					|| rf_index + j + rfi->alignment_start[sg_id] >= rfi->end_A
-					|| rfi->map_A_to_B[rf_index + j + rfi->alignment_start[sg_id] - rfi->start_A] != -1))
-				|| (sg_id && (rf_index + j + rfi->alignment_start[sg_id] < rfi->start_B
-					|| rf_index + j + rfi->alignment_start[sg_id] >= rfi->end_B
-					|| rfi->map_B_to_A[rf_index + j + rfi->alignment_start[sg_id] - rfi->start_B] != -1))) {
+			/* compute likelihood of read nucleotides aligned
+			 * before/after the target or to terminal indels in the
+			 * subgenome alignment (coded as -2)
+			 */
+			if ((!sg_id && (arf_index < rfi->start_A || arf_index >= rfi->end_A
+					|| rfi->map_A_to_B[arf_index - rfi->start_A] != -1))
+				|| (sg_id && (arf_index < rfi->start_B || arf_index >= rfi->end_B
+					|| rfi->map_B_to_A[arf_index - rfi->start_B] != -1))) {
 
-				/* give up on alternative mapping b/c the proposed alternative alignment is already aligned */
+				/* had an alternative alignment going */
 				if (try_alternative_alignment && mapped_rf_idx >= 0) {
-				/* in alignment and we're trying to align to a ref nuc already claimed by alternative alignment */
-				if (rf_index + j + rfi->alignment_start[sg_id] >= (sg_id ? rfi->start_B : rfi->start_A)
-					&& rf_index + j + rfi->alignment_start[sg_id] < (sg_id ? rfi->end_B : rfi->end_A)
-					&& (int)(rf_index + j + rfi->alignment_start[sg_id] - (sg_id ? rfi->start_B : rfi->start_A)) >= mapped_rf_idx
-					&& (int)(rf_index + j + rfi->alignment_start[sg_id] - (sg_id ? rfi->start_B : rfi->start_A)) <= mapped_rf_idx + (int)mapped_rf_len) {
-					debug_msg(fxn_debug >= DEBUG_III, fxn_debug, "Discarding alternative alignment to [%d,%d] with ll=%f when aligning reference position %d\n", mapped_rf_idx, mapped_rf_idx+mapped_rf_len, ll_alt, rf_index + j + rfi->alignment_start[sg_id] - (sg_id ? rfi->start_B : rfi->start_A));
-					mapped_rf_idx = -1;
-					mapped_rf_len = 0;
-					ll_alt = 0;
-				/* accept alternative mapping if alignment continues after last reference nucleotide of alternate reference */
-				} else if (mapped_rf_idx >= 0 && rf_index + j + rfi->alignment_start[sg_id] - (sg_id ? rfi->start_B : rfi->start_A) > mapped_rf_idx + mapped_rf_len) {
-					debug_msg(fxn_debug >= DEBUG_III, fxn_debug, "Accepting alternative alignment to [%d,%d] with ll=%f when aligning reference position %d\n", mapped_rf_idx, mapped_rf_idx+mapped_rf_len, ll_alt, rf_index + j + rfi->alignment_start[sg_id] - (sg_id ? rfi->start_B : rfi->start_A));
-					ll += ll_alt;
-					ll_alt = 0;
-					mapped_rf_idx = -1;
-					mapped_rf_len = 0;
-				}
+
+					/* in alignment and we're trying to align to a ref nuc claimed by alternative alignment,
+					 * so we'll drop the alternative alignment
+					 */
+					if (arf_index >= (sg_id ? rfi->start_B : rfi->start_A)
+						&& arf_index < (sg_id ? rfi->end_B : rfi->end_A)				/* in alignment */
+						&& (int)(arf_index - (sg_id ? rfi->start_B : rfi->start_A)) >= mapped_rf_idx	/* in alternatively mapped alignment */
+						&& (int)(arf_index - (sg_id ? rfi->start_B : rfi->start_A)) <= mapped_rf_idx + (int)mapped_rf_len) {
+						debug_msg(fxn_debug >= DEBUG_III, fxn_debug, "Discarding alternative alignment to [%d,%d] with ll=%f when aligning reference position %d\n", mapped_rf_idx, mapped_rf_idx+mapped_rf_len, ll_alt, rf_index + j + rfi->alignment_start[sg_id] - (sg_id ? rfi->start_B : rfi->start_A));
+						mapped_rf_idx = -1;
+						mapped_rf_len = 0;
+						ll_alt = 0;
+					/* accept alternative mapping if alignment continues after last reference nucleotide
+					 * involved in alternate alignment
+					 */
+					} else if (arf_index - (sg_id ? rfi->start_B : rfi->start_A) > mapped_rf_idx + mapped_rf_len) {
+						debug_msg(fxn_debug >= DEBUG_III, fxn_debug, "Accepting alternative alignment to [%d,%d] with ll=%f when aligning reference position %d\n", mapped_rf_idx, mapped_rf_idx+mapped_rf_len, ll_alt, arf_index - (sg_id ? rfi->start_B : rfi->start_A));
+						ll += ll_alt;
+						ll_alt = 0;	/* reset */
+						mapped_rf_idx = -1;
+						mapped_rf_len = 0;
+					}
 				}
 				mls->pos = rd_index + j;
 				double llt = sub_prob_given_q_with_encoding(ref[rf_index + j],
@@ -2682,7 +2653,7 @@ debug_msg_cont(fxn_debug>=DEBUG_II, fxn_debug, " -> rf_idxB=%d)\n",
 				ll += llt;
 				debug_msg(fxn_debug >= DEBUG_III, fxn_debug, "%u (%u): %c -> %c (%c): %f (%f)\n", rf_index + j, j, iupac_to_char[ref[rf_index + j]], xy_to_char[get_nuc(se->read, XY_ENCODING, rd_index + j)], (char)get_qual(se->qual, rd_index + j) + MIN_ASCII_QUALITY_SCORE, llt, ll);
 				/* relative reference index within alignment region */
-				last_mapped_idx = rf_index + j + rfi->alignment_start[sg_id] - (sg_id ? rfi->start_B : rfi->start_A);
+				last_mapped_idx = arf_index - (sg_id ? rfi->start_B : rfi->start_A);
 
 			} else {
 				debug_msg(fxn_debug >= DEBUG_III, fxn_debug, "%u (%u): %c -> %c (%c): skipped (%f)\n", rf_index + j, j, iupac_to_char[ref[rf_index + j]], xy_to_char[get_nuc(se->read, XY_ENCODING, rd_index + j)], (char)get_qual(se->qual, rd_index + j) + MIN_ASCII_QUALITY_SCORE, ll);
@@ -2697,21 +2668,21 @@ debug_msg_cont(fxn_debug>=DEBUG_II, fxn_debug, " -> rf_idxB=%d)\n",
 						? rfi->map_A_to_B[rfi->read_to_ref[!sg_id][other_rd_idx]]
 						: rfi->map_B_to_A[rfi->read_to_ref[!sg_id][other_rd_idx]];
 			if ((!sg_id && arf_idx >= rfi->start_A					/* read nuc aligned to A */
-				&& arf_idx < rfi->end_A						/* in target region */
-				&& rfi->map_A_to_B[arf_idx - rfi->start_A] == -1		/* in A insertion (or B deletion) */
-				&& rfi->read_to_ref[!sg_id][other_rd_idx] != -1			/* but read nuc IS aligned in B alignment */
-				&& (rfi->map_B_to_A[rfi->read_to_ref[!sg_id][other_rd_idx]]	/* and maps ahead to ref nuc not yet consumed */
-					> (int) (arf_idx - rfi->start_A)
-				|| rfi->map_B_to_A[rfi->read_to_ref[!sg_id][other_rd_idx]]	/* or behind to ref nuc that was not consumed */
-					> last_mapped_idx))
-				|| (sg_id && arf_idx >= rfi->start_B				/* read alignment to B */
-				&& arf_idx < rfi->end_B						/* read nuc aligned in target region */
-				&& rfi->map_B_to_A[arf_idx - rfi->start_B] == -1		/* in B insertion (or A deletion) */
-				&& rfi->read_to_ref[!sg_id][other_rd_idx] != -1			/* but read nuc IS aligned in A alignment */
-				&& (rfi->map_A_to_B[rfi->read_to_ref[!sg_id][other_rd_idx]]	/* and maps ahead to ref nuc not yet consumed */
-					> (int)(arf_idx - rfi->start_B)
-				|| rfi->map_A_to_B[rfi->read_to_ref[!sg_id][other_rd_idx]]	/* or behind to ref nuc that was not consumed */
-					> last_mapped_idx))) {
+					&& arf_idx < rfi->end_A						/* in target region */
+					&& rfi->map_A_to_B[arf_idx - rfi->start_A] == -1		/* in A insertion (or B deletion) */
+					&& rfi->read_to_ref[!sg_id][other_rd_idx] != -1			/* but read nuc IS aligned in B alignment */
+					&& (rfi->map_B_to_A[rfi->read_to_ref[!sg_id][other_rd_idx]]	/* and maps ahead to ref nuc not yet consumed */
+						> (int) (arf_idx - rfi->start_A)
+					|| rfi->map_B_to_A[rfi->read_to_ref[!sg_id][other_rd_idx]]	/* or behind to ref nuc that was not consumed */
+						> last_mapped_idx))
+				|| (sg_id && arf_idx >= rfi->start_B					/* read alignment to B */
+					&& arf_idx < rfi->end_B						/* read nuc aligned in target region */
+					&& rfi->map_B_to_A[arf_idx - rfi->start_B] == -1		/* in B insertion (or A deletion) */
+					&& rfi->read_to_ref[!sg_id][other_rd_idx] != -1			/* but read nuc IS aligned in A alignment */
+					&& (rfi->map_A_to_B[rfi->read_to_ref[!sg_id][other_rd_idx]]	/* and maps ahead to ref nuc not yet consumed */
+						> (int)(arf_idx - rfi->start_B)
+					|| rfi->map_A_to_B[rfi->read_to_ref[!sg_id][other_rd_idx]]	/* or behind to ref nuc that was not consumed */
+						> last_mapped_idx))) {
 
 				mls->pos = rd_index + j;
 				/* alternative reference nucleotide */

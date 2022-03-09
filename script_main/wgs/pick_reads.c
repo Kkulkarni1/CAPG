@@ -19,7 +19,10 @@
 #include "pick_reads.h"
 #include "order.h"
 
+int match_indels(merge_hash *mh, sam **sds, ref_info *rfi);
+
 int soft_clip_alignment(sam_entry *se, unsigned int fiveprime_sc, unsigned int threeprime_sc, int rc);
+int match_indel(merge_hash *me, sam **sds, ref_info *rfi, unsigned int start_rd_idx, unsigned int end_rd_idx, unsigned int sg_idx);
 
 
 void default_options_rf(options_rf *opt)
@@ -336,6 +339,14 @@ int extract_ref(char const *samtools_command, char const *ref_name, size_t ref_s
 	
 }/* extract_ref */
 
+/**
+ * Read command line options have to do with reference information.
+ *
+ * @param opt	options object for reference information
+ * @param argc	number of arguments on command-line
+ * @param argv	the arguments on the command-line
+ * @return	error status
+ */
 int parse_rf_options(options_rf *opt, int argc, char *argv[])
 {
 	int argv_idx = 1;
@@ -428,6 +439,533 @@ void output_selected_reads(char const *f, sam **sds, merge_hash *mh)
 	}
 	fclose(fpp);
 } /* output_selected_reads */
+
+/**
+ * Compute mapping from 0-based read index to 0-based reference index relative
+ * to the target region (not alignment region) by alignment in SAM file. Maps
+ * to -1 if maps to reference nucleotide not within aligned target. Resulting
+ * map stored in ref_info::read_to_ref[N_FILES].
+ *
+ * @param rfi	reference information
+ * @param sds	read alignments
+ * @param me	merged hash of read alignments
+ * @return	error status
+ */
+int index_read_to_ref(ref_info *rfi, sam *sds[N_FILES], merge_hash *me)
+{
+	sam_entry *se = &sds[0]->se[me->indices[0][0]];
+
+	/* (re)allocate space for mapping */
+	if (rfi->read_len != se->read->len) {
+		for (unsigned int j = 0; j < N_FILES; ++j) {
+			if (rfi->read_to_ref[j])
+				free(rfi->read_to_ref[j]);
+			rfi->read_to_ref[j] = malloc(se->read->len * sizeof(*rfi->read_to_ref[j]));
+			if (!rfi->read_to_ref[j])
+				exit(mmessage(ERROR_MSG, MEMORY_ALLOCATION, "ref_info::read_to_ref"));
+		}
+		rfi->read_len = se->read->len;
+	}
+
+	/* map read index to target index */
+	for (unsigned int j = 0; j < N_FILES; ++j) {
+		if (j)
+			se = &sds[j]->se[me->indices[j][0]];
+		//print_cigar(stderr, se);
+		//fprintf(stderr, "Alignment %u (%zu):", j, se->read->len);
+
+		size_t rf_idx = se->pos - 1;
+		size_t rd_idx = 0;
+
+		for (unsigned int i = 0; i < se->cig->n_ashes; ++i) {
+			if (se->cig->ashes[i].type == CIGAR_DELETION) {
+				rf_idx += se->cig->ashes[i].len;
+				continue;
+			} else if (se->cig->ashes[i].type == CIGAR_SOFT_CLIP) {
+				for (unsigned int k = 0; k < se->cig->ashes[i].len; ++k) {
+					rfi->read_to_ref[j][rd_idx + k] = ALIGN_SOFT_CLIP;	/* nowhere, but don't count */
+					//fprintf(stderr, " %zu=%d", rd_idx + k, rfi->read_to_ref[j][rd_idx + k]);
+				}
+				rd_idx += se->cig->ashes[i].len;
+				continue;
+			} else if (se->cig->ashes[i].type == CIGAR_INSERTION) {
+				for (unsigned int k = 0; k < se->cig->ashes[i].len; ++k) {
+					rfi->read_to_ref[j][rd_idx + k] = ALIGN_INSERTION;	/* nowhere */
+					//fprintf(stderr, " %zu=%d", rd_idx + k, rfi->read_to_ref[j][rd_idx + k]);
+				}
+				rd_idx += se->cig->ashes[i].len;
+				continue;
+			} else if (se->cig->ashes[i].type == CIGAR_HARD_CLIP) {
+				continue;
+			} else if (se->cig->ashes[i].type != CIGAR_MATCH
+				   && se->cig->ashes[i].type != CIGAR_MISMATCH
+				   && se->cig->ashes[i].type != CIGAR_MMATCH) {
+				continue;
+			}
+
+			for (unsigned int k = 0; k < se->cig->ashes[i].len; ++k) {
+				/* position maps to target region */
+				if (!j && rf_idx + k >= (j ? rfi->start_B : rfi->start_A) && rf_idx + k < (j ? rfi->end_B : rfi->end_A))
+					rfi->read_to_ref[j][rd_idx + k] = rf_idx + k - (j ? rfi->start_B : rfi->start_A);
+				else if (!j)	/* outside target */
+					rfi->read_to_ref[j][rd_idx + k] = ALIGN_OUTSIDE;
+				else if (j && rf_idx + k >= (j ? rfi->start_B : rfi->start_B) && rf_idx + k < (j ? rfi->end_B : rfi->end_A))
+					rfi->read_to_ref[j][rd_idx + k] = rf_idx + k - (j ? rfi->start_B : rfi->start_A);
+				else
+					rfi->read_to_ref[j][rd_idx + k] = ALIGN_OUTSIDE;
+				//fprintf(stderr, " %zu=%d", rd_idx + k, rfi->read_to_ref[j][rd_idx + k]);
+			}
+			rd_idx += se->cig->ashes[i].len;
+			rf_idx += se->cig->ashes[i].len;
+		}
+		//fprintf(stderr, "\n");
+	}
+
+	return NO_ERROR;
+} /* index_read_to_ref */
+
+/**
+ * Match indels between read pairs to maximize homoeologous alignments.
+ *
+ * [TODO,BUG,KSD] This whole function assumes N_FILES == 2
+ *
+ * @param mh	merge hash
+ * @param sds	sam files of read alignments
+ * @param rfi	reference information
+ * @return	error status
+ */
+int match_indels(merge_hash *mh, sam **sds, ref_info *rfi)
+{
+	int fxn_debug = ABSOLUTE_SILENCE;//DEBUG_I;//
+	mlogit_stuff mls = {NULL, 0};
+
+	for (merge_hash *me = mh; me != NULL; me = me->hh.next) {
+
+		if (me->exclude)
+			continue;
+
+		index_read_to_ref(rfi, sds, me);
+
+		sam_entry *se = &sds[0]->se[me->indices[0][0]];	/* sgA is default alignment */
+		unsigned int rd_idx = 0;
+		unsigned int last_rd_idx = 0;	/* last read index involved in homoeologous alignment */
+		unsigned int last_rf_idx, last_other_rf_idx;		/* last sgA and sgB index involved in sgA (default) alignment */
+		unsigned int last_alt_rf_idx, last_alt_other_rf_idx;	/* last sgA and sgB index involved in sgB (alternate) alignment */
+		unsigned char in_discrepancy = 0;
+		double lla = 0, llb = 0;
+
+		for (unsigned int i = 0; i < se->cig->n_ashes; ++i) {
+			if (se->cig->ashes[i].type == CIGAR_SKIP) {
+				return(mmessage(ERROR_MSG, INTERNAL_ERROR, "cannot handle cigar skips"));
+			} else if (se->cig->ashes[i].type == CIGAR_SOFT_CLIP) {
+				/* these have already been matched across read alignments */
+				rd_idx += se->cig->ashes[i].len;
+				continue;
+			} else if (se->cig->ashes[i].type == CIGAR_DELETION) {
+				if (in_discrepancy) {
+					/* what to do? */
+					for (unsigned int j = 0; j < se->cig->ashes[i].len; ++j) {
+						mls.pos = rd_idx + j;
+						/* force a mismatch to penalize deletions worse than substitution */
+						lla += sub_prob_given_q_with_encoding(IUPAC_A,
+							//get_nuc(se->read, XY_ENCODING, rd_idx + j),
+							XY_C,	/* force mismatch */
+							IUPAC_ENCODING, XY_ENCODING,
+							MAX_ILLUMINA_QUALITY_SCORE, 1, (void *) &mls);
+							//get_qual(se->qual, rd_idx + j), 1, (void *) &mls);
+					}
+				}
+				continue;
+			} else if (se->cig->ashes[i].type != CIGAR_MMATCH
+				&& se->cig->ashes[i].type != CIGAR_MATCH
+				&& se->cig->ashes[i].type != CIGAR_MISMATCH
+				&& se->cig->ashes[i].type != CIGAR_INSERTION) {
+				continue;
+			}
+
+			for (unsigned int j = 0; j < se->cig->ashes[i].len; ++j) {
+				int rf_idx = rfi->read_to_ref[0][rd_idx + j];		/* sgA index in A alignment */
+				int other_rf_idx = rfi->read_to_ref[1][rd_idx + j];	/* sgB index in B alignment */
+				int alt_rf_idx = other_rf_idx >= 0
+					? rfi->map_B_to_A[other_rf_idx]	/* sgA index implied by B alignment */
+					: other_rf_idx;
+				int alt_other_rf_idx = rf_idx >= 0
+					? rfi->map_A_to_B[rf_idx]	/* sgB index implied by A alignment */
+					: rf_idx;
+
+				/* exit discrepancy */
+				if (rf_idx >= 0 && rf_idx == alt_rf_idx) {
+					if (other_rf_idx != alt_other_rf_idx)
+						exit(mmessage(ERROR_MSG, INTERNAL_ERROR,
+							"Homoeologous alignment in sgA, but not sgB!\n"));
+					if (in_discrepancy && rd_idx + j > last_rd_idx + 1) {
+						if (lla > llb) {
+							match_indel(me, sds, rfi, last_rd_idx, rd_idx, 0);
+						} else if (llb > lla) {
+							match_indel(me, sds, rfi, last_rd_idx, rd_idx, 1);
+						} else {
+							double r = (double) rand() / RAND_MAX;
+	
+							if (r < 0.5)
+								match_indel(me, sds, rfi, last_rd_idx, rd_idx, 0);
+							else
+								match_indel(me, sds, rfi, last_rd_idx, rd_idx, 1);
+						}
+						lla = llb = 0;
+					}
+					in_discrepancy = 1;
+					last_rd_idx = rd_idx;	/* last read index involved in homoeologous alignment */
+					last_rf_idx = rf_idx;				/* last sgA index aligned in sgA alignment */
+					last_other_rf_idx = other_rf_idx;		/* last sgB index aligned in sgB alignment */
+					last_alt_rf_idx = alt_rf_idx;			/* last sgA index aligned in sgB alignment */
+					last_alt_other_rf_idx = alt_other_rf_idx;	/* last sgB index aligned in sgA alignment */
+					
+
+				/* continue in discrepancy */
+				} else if (in_discrepancy && (rf_idx < 0 || rf_idx != alt_rf_idx)) {
+
+					iupac_t rn;
+
+					mls.pos = rd_idx + j;
+
+					/* log likelihood of sgA alignment */
+					/* read to sgA */
+					if (rf_idx >= 0) {
+						/* there has been deletion */
+						if ((unsigned int) rf_idx > last_rf_idx + 1) {
+							lla += (rf_idx - last_rf_idx - 1) * sub_prob_given_q_with_encoding(
+								IUPAC_A, XY_C,
+								IUPAC_ENCODING, XY_ENCODING,
+								MAX_ILLUMINA_QUALITY_SCORE, 1, (void *) &mls);
+						}
+						rn = rfi->ref[0][(size_t) rf_idx + rfi->start_A - rfi->alignment_start[0]];
+						lla += sub_prob_given_q_with_encoding(rn,
+							get_nuc(se->read, XY_ENCODING, rd_idx + j),
+							IUPAC_ENCODING, XY_ENCODING,
+							get_qual(se->qual, rd_idx + j), 1, (void *) &mls);
+						last_rf_idx = rf_idx;
+					} else {	/* CIGAR_INSERTION */
+						/* think I decided not to penalize insertion
+						lla += sub_prob_given_q_with_encoding(IUPAC_A,
+							XY_C,
+							IUPAC_ENCODING, XY_ENCODING,
+							MAX_ILLUMINA_QUALITY_SCORE, 1, (void *) &mls);
+						*/
+					}
+					/* read to sgB via sgA alignment */
+					if (alt_other_rf_idx >= 0) {
+						if ((unsigned int) alt_other_rf_idx > last_alt_other_rf_idx + 1) {
+							lla += (alt_other_rf_idx - last_other_rf_idx - 1) * sub_prob_given_q_with_encoding(
+								IUPAC_A, XY_C,
+								IUPAC_ENCODING, XY_ENCODING,
+								MAX_ILLUMINA_QUALITY_SCORE, 1, (void *) &mls);
+						}
+						rn = rfi->ref[1][(size_t) alt_other_rf_idx + rfi->start_B - rfi->alignment_start[1]];
+						lla += sub_prob_given_q_with_encoding(rn,
+							get_nuc(se->read, XY_ENCODING, rd_idx + j),
+							IUPAC_ENCODING, XY_ENCODING,
+							get_qual(se->qual, rd_idx + j), 1, (void *) &mls);
+						last_alt_other_rf_idx = alt_other_rf_idx;
+					} else {
+						/* insertion */
+					}
+
+					/* log likelihood of sgB alignment */
+					/* read to sgA via sgB alignment */
+					if (alt_rf_idx >= 0) {
+						if ((unsigned int) alt_rf_idx > last_alt_rf_idx + 1) {
+							llb += (alt_rf_idx - last_alt_rf_idx - 1) * sub_prob_given_q_with_encoding(
+								IUPAC_A, XY_C,
+								IUPAC_ENCODING, XY_ENCODING,
+								MAX_ILLUMINA_QUALITY_SCORE, 1, (void *) &mls);
+						}
+						rn = rfi->ref[0][(size_t) alt_rf_idx + rfi->start_A - rfi->alignment_start[0]];
+						/* log likelihood of this alternative */
+						llb += sub_prob_given_q_with_encoding(rn,
+							get_nuc(se->read, XY_ENCODING, rd_idx + j),
+							IUPAC_ENCODING, XY_ENCODING,
+							get_qual(se->qual, rd_idx + j), 1, (void *) &mls);
+						last_alt_rf_idx = alt_rf_idx;
+					}
+					/* read to sgB via sgB alignment */
+					if (other_rf_idx >= 0) {
+						if ((unsigned int) other_rf_idx > last_other_rf_idx + 1) {
+							llb += (other_rf_idx - last_other_rf_idx - 1) * sub_prob_given_q_with_encoding(
+								IUPAC_A, XY_C,
+								IUPAC_ENCODING, XY_ENCODING,
+								MAX_ILLUMINA_QUALITY_SCORE, 1, (void *) &mls);
+						}
+						/* read to sgB */
+						rn = rfi->ref[1][(size_t) other_rf_idx + rfi->start_B - rfi->alignment_start[1]];
+						/* log likelihood of this alternative */
+						llb += sub_prob_given_q_with_encoding(rn,
+							get_nuc(se->read, XY_ENCODING, rd_idx + j),
+							IUPAC_ENCODING, XY_ENCODING,
+							get_qual(se->qual, rd_idx + j), 1, (void *) &mls);
+						last_other_rf_idx = other_rf_idx;
+					}
+				}
+			}
+			rd_idx += se->cig->ashes[i].len;
+		}
+	}
+
+	return NO_ERROR;
+} /* match_indels */
+
+/**
+ * Match indels within a discrepant region between two homoeologously
+ * aligned positions.
+ *
+ * [TODO,KSD,BUG] Assumes N_FILES == 2.
+ *
+ * @param me		merge_hash with paired reads
+ * @param sds		sam entries
+ * @param rfi		reference information
+ * @param start_rd_idx	index of read nucleotide of 5' homoeologous alignment
+ * @param end_rd_idx	index of read nucleotide of 3' homoeologous alignment
+ * @param sg_idx	which subgenome has the "better" alignment
+ * @return		error status
+ */
+int match_indel(merge_hash *me, sam **sds, ref_info *rfi, unsigned int start_rd_idx, unsigned int end_rd_idx, unsigned int sg_idx)
+{
+
+	/* this alignment */
+	sam_entry *se = &sds[!sg_idx]->se[me->indices[!sg_idx][0]];
+	unsigned char in_region = 0;
+
+	/* other subgenome reference index aligned to homoeologous site right before discrepant region */
+	int other_rf_idx = rfi->read_to_ref[sg_idx][start_rd_idx];
+	unsigned int last_other_rf_idx = (unsigned int) other_rf_idx;	/* safe cast */
+	int prev_ash = ALIGN_MATCH;	/* previous homoeologous site is a match */
+	unsigned int n_old_ashes = 0, n_new_ashes = 0;
+	unsigned int rd_idx = 0;
+
+	/* count number of old and new ashes in the discrepant region */
+	for (unsigned int j = 0; j < se->cig->n_ashes; ++j) {
+		if (se->cig->ashes[j].type == CIGAR_SOFT_CLIP) {
+			rd_idx += se->cig->ashes[j].len;
+			if (in_region) /* cannot be */
+				exit(mmessage(ERROR_MSG, INTERNAL_ERROR,
+					"Cannot enter a soft clip while in a discrepant region.\n"));
+			continue;
+		} else if (se->cig->ashes[j].type == CIGAR_DELETION) {
+			if (in_region) ++n_old_ashes;
+			continue;
+		} else if (se->cig->ashes[j].type != CIGAR_MMATCH
+			&& se->cig->ashes[j].type != CIGAR_MATCH
+			&& se->cig->ashes[j].type != CIGAR_MISMATCH
+			&& se->cig->ashes[j].type != CIGAR_INSERTION) {
+			continue;
+		}
+
+		/* handle insertion or match */
+
+		if (in_region)
+			++n_old_ashes; /* presume part of discrepant region */
+
+		/* walk through insertion or match */
+		for (unsigned int k = 0; k < se->cig->ashes[j].len; ++k) {
+
+			/* stepping out of region */
+			if (in_region && rd_idx + k >= end_rd_idx) {
+				if (!k)	/* actually ends with this new ash */
+					--n_old_ashes;
+				in_region = 0;
+				break;
+
+			/* continuing in region */
+			} else if (in_region) {
+				other_rf_idx = rfi->read_to_ref[!sg_idx][rd_idx + k];		/* other reference index aligned to this read nucleotide */
+				int alt_rf_idx = other_rf_idx >= 0
+					? sg_idx ? rfi->map_A_to_B[other_rf_idx]
+						: rfi->map_B_to_A[other_rf_idx]	/* A ref index or ALIGN_INSERTION or ALIGN_DELETION */
+					: ALIGN_INSERTION;
+
+				/* there must have been a deletion in other subgenome alignment */
+				if (other_rf_idx >= 0 && (unsigned int) other_rf_idx > last_other_rf_idx + 1) {
+					++n_new_ashes;
+					prev_ash = ALIGN_DELETION;
+				}
+
+				/* entering new match region */
+				if (alt_rf_idx >= 0 && prev_ash != ALIGN_MATCH) {
+					++n_new_ashes;
+					prev_ash = ALIGN_MATCH;
+
+				/* entering new ash */
+				} else if (alt_rf_idx != prev_ash) {
+					++n_new_ashes;
+					prev_ash = alt_rf_idx;
+				}
+
+				/* record last consumed index of sgB reference */
+				if (other_rf_idx >= 0)
+					last_other_rf_idx = other_rf_idx;
+
+			/* entering region: must enter homoeologous INDEL */
+			} else if (!in_region && rd_idx + k > start_rd_idx) {
+				other_rf_idx = rfi->read_to_ref[!sg_idx][rd_idx + k];
+				int alt_rf_idx = other_rf_idx >= 0
+					? sg_idx ? rfi->map_A_to_B[other_rf_idx]
+						: rfi->map_B_to_A[other_rf_idx]	/* ALIGN_INSERTION or ALIGN_DELETION */
+					: ALIGN_INSERTION;
+
+				/* there must have been a deletion in sgB alignment */
+				if (other_rf_idx >= 0 && (unsigned int) other_rf_idx > last_other_rf_idx + 1) {
+					++n_new_ashes;
+					prev_ash = ALIGN_DELETION;
+				}
+
+				++n_new_ashes;
+				prev_ash = alt_rf_idx;
+				in_region = 1;
+
+				/* record last consumed index of sgB reference */
+				if (other_rf_idx >= 0)
+					last_other_rf_idx = other_rf_idx;
+			}
+		}
+		rd_idx += se->cig->ashes[j].len;
+		if (rd_idx >= end_rd_idx)
+			break;
+	}
+
+	/* allocate new ashes */
+	ash *ashes = se->cig->ashes;
+	if (n_new_ashes != n_old_ashes) {
+		ash *ashes = malloc((se->cig->n_ashes + n_new_ashes - n_old_ashes) * sizeof(*ashes));
+
+		if (!ashes)
+			return(mmessage(ERROR_MSG, MEMORY_ALLOCATION, "ashes"));
+	}
+
+	/* build the new cigar for this subgenome alignment based on other selected subgenome alignment */
+	rd_idx = 0;	/* this is read nucleotide with homoeologous alignment right before the discrepant region */
+	last_other_rf_idx = rfi->read_to_ref[sg_idx][start_rd_idx];
+	prev_ash = ALIGN_MATCH;
+	unsigned int n_ash = 0;
+	for (unsigned int j = 0; j < se->cig->n_ashes; ++j) {
+		if (se->cig->ashes[j].type == CIGAR_SOFT_CLIP) {
+			ashes[n_ash].type = CIGAR_SOFT_CLIP;
+			ashes[n_ash++].len = se->cig->ashes[j].len;
+			rd_idx += se->cig->ashes[j].len;
+			continue;
+		} else if (se->cig->ashes[j].type == CIGAR_DELETION) {
+			ashes[n_ash].type = CIGAR_DELETION;
+			ashes[n_ash++].len = se->cig->ashes[j].len;
+			continue;
+		} else if (se->cig->ashes[j].type != CIGAR_MMATCH
+			&& se->cig->ashes[j].type != CIGAR_MATCH
+			&& se->cig->ashes[j].type != CIGAR_MISMATCH
+			&& se->cig->ashes[j].type != CIGAR_INSERTION) {
+			continue;
+		}
+
+		/* insertion or match */
+		for (unsigned int k = 0; k < se->cig->ashes[j].len; ++k) {
+
+			/* stepping out of region */
+			if (in_region && rd_idx + k >= end_rd_idx) {
+				/* take rest of old ash */
+				if (prev_ash != se->cig->ashes[j].type) {
+					ashes[n_ash].type = se->cig->ashes[j].type;
+					ashes[n_ash++].len = se->cig->ashes[j].len - k;
+				}
+				break;
+
+			/* continuing in region */
+			} else if (in_region) {
+				other_rf_idx = rfi->read_to_ref[!sg_idx][rd_idx + k];
+				int alt_rf_idx = other_rf_idx >= 0
+					? sg_idx
+						? rfi->map_A_to_B[other_rf_idx]	/* A ref index or ALIGN_INSERTION or ALIGN_DELETION */
+						: rfi->map_B_to_A[other_rf_idx]	/* A ref index or ALIGN_INSERTION or ALIGN_DELETION */
+					: ALIGN_INSERTION;	/* between homoeologous alignments, this is the only option for a non-aligned read nucleotide */
+
+				/* there must have been a deletion in other subgenome alignment */
+				if (other_rf_idx >= 0 && (unsigned int) other_rf_idx > last_other_rf_idx + 1) {
+					ashes[n_ash].type = CIGAR_DELETION;
+					ashes[n_ash++].len = other_rf_idx - last_other_rf_idx;
+					prev_ash = ALIGN_DELETION;
+				}
+
+				/* entering new match region */
+				if (alt_rf_idx >= 0 && prev_ash != ALIGN_MATCH) {
+					ashes[n_ash].type = ALIGN_MATCH;
+					ashes[n_ash].len = 1;
+					prev_ash = ALIGN_MATCH;
+
+				/* entering new ash */
+				} else if (alt_rf_idx != prev_ash) {
+					ashes[++n_ash].type = alt_rf_idx == ALIGN_INSERTION ? CIGAR_INSERTION: CIGAR_DELETION;
+					ashes[n_ash].len = 1;
+					prev_ash = alt_rf_idx;
+
+				/* continuing in same ash */
+				} else {
+					++ashes[n_ash].len;
+				}
+
+				/* record last consumed index of sgB reference */
+				if (other_rf_idx >= 0)
+					last_other_rf_idx = other_rf_idx;
+
+			/* entering region: must enter homoeologous INDEL, because
+			 * if it was a match, we'd just have another homoeologous
+			 * match
+			 */
+			} else if (!in_region && rd_idx + k > start_rd_idx) {
+				other_rf_idx = rfi->read_to_ref[!sg_idx][rd_idx + k];
+				int alt_rf_idx = other_rf_idx >= 0
+					? sg_idx
+						? rfi->map_A_to_B[other_rf_idx]
+						: rfi->map_B_to_A[other_rf_idx]	/* ALIGN_INSERTION or ALIGN_DELETION */
+					: ALIGN_INSERTION;
+
+				/* there must have been a deletion in other subgenome alignment */
+				if (other_rf_idx >= 0 && (unsigned int) other_rf_idx > last_other_rf_idx + 1) {
+					ashes[n_ash].type = CIGAR_DELETION;
+					ashes[n_ash++].len = other_rf_idx - last_other_rf_idx;
+					prev_ash = ALIGN_DELETION;
+				}
+
+				/* entering new match region */
+				if (alt_rf_idx >= 0 && prev_ash != ALIGN_MATCH) {
+					ashes[n_ash].type = ALIGN_MATCH;
+					ashes[n_ash].len = 1;
+					prev_ash = ALIGN_MATCH;
+
+				/* entering new ash */
+				} else if (alt_rf_idx != prev_ash) {
+					/* insertion in other subgenome with respect to this subgenome indicates a deletion in read wrt this subgenome alignment */
+					ashes[n_ash].type = alt_rf_idx == ALIGN_INSERTION ? CIGAR_DELETION : CIGAR_INSERTION;
+					ashes[n_ash++].len = 1;
+				}
+
+				prev_ash = alt_rf_idx;
+				in_region = 1;
+
+				/* record last consumed index of sgB reference */
+				if (other_rf_idx >= 0)
+					last_other_rf_idx = other_rf_idx;
+			}
+		}
+		rd_idx += se->cig->ashes[j].len;
+		if (rd_idx >= end_rd_idx)
+			break;
+	}
+	if (n_new_ashes > n_old_ashes) {
+		free(se->cig->ashes);
+		se->cig->n_ashes += n_new_ashes - n_old_ashes;
+	} else if (n_old_ashes > n_new_ashes) {
+		free(se->cig->ashes);
+		se->cig->n_ashes -= n_old_ashes - n_new_ashes;
+	}
+	se->cig->ashes = ashes;
+
+	return NO_ERROR;
+} /* match_indel */
 
 /**
  * For a merged hash, reset alignments to have same level of soft-clipping of the
@@ -1157,9 +1695,9 @@ void match_pair(ref_info *rfi)
 	rfi->map_B_to_A = malloc(lengthb * sizeof(*rfi->map_B_to_A));
 	
 	for (size_t j = 0; j < length; ++j)
-		rfi->map_A_to_B[j] = -2;
+		rfi->map_A_to_B[j] = ALIGN_SOFT_CLIP;//-2;
 	for (size_t j = 0; j < lengthb; ++j)
-		rfi->map_B_to_A[j] = -2;
+		rfi->map_B_to_A[j] = ALIGN_SOFT_CLIP;//-2;
 	
 	size_t rf_idx = se->pos - 1;	/* 0-based position in reference 0 (A) */
 	
@@ -1170,14 +1708,14 @@ void match_pair(ref_info *rfi)
 		} else if (se->cig->ashes[i].type == CIGAR_SKIP) {
 		} else if (se->cig->ashes[i].type == CIGAR_DELETION) {
 			for (unsigned int m = 0; m < se->cig->ashes[i].len; ++m)
-				rfi->map_A_to_B[rf_idx + m] = -1;
+				rfi->map_A_to_B[rf_idx + m] = ALIGN_DELETION;//-1;
 			rf_idx += se->cig->ashes[i].len;
 		} else if (se->cig->ashes[i].type == CIGAR_INSERTION) {
 			for (unsigned int m = 0; m < se->cig->ashes[i].len; ++m) {
 				if (rfi->strand_B)
-					rfi->map_B_to_A[lengthb - (rd_idx + m) - 1] = -1;
+					rfi->map_B_to_A[lengthb - (rd_idx + m) - 1] = ALIGN_INSERTION;//-1;
 				else
-					rfi->map_B_to_A[rd_idx + m] = -1;
+					rfi->map_B_to_A[rd_idx + m] = ALIGN_INSERTION;//-1;
 			}
 			rd_idx += se->cig->ashes[i].len;
 		} else if (se->cig->ashes[i].type == CIGAR_MATCH

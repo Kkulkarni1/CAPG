@@ -308,7 +308,7 @@ int extract_ref(char const *samtools_command, char const *ref_name, size_t ref_s
 
 	// index the whole reference genome file
 	if (!ref_file || !(fp = fopen(ref_file, "r")))
-		mmessage(ERROR_MSG, FILE_NOT_FOUND, "Reference file '%s' not found\n", ref_file);
+		return(mmessage(ERROR_MSG, FILE_NOT_FOUND, ref_file));
 	fclose(fp);
 	
 	size_t cmd_len = strlen(samtools_command) + strlen(ref_file)

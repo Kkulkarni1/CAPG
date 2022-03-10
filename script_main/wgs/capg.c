@@ -900,6 +900,7 @@ int main(int argc, const char *argv[])
 
 	/* match soft-clips so likelihood computed from same data in all subgenomes */
 	match_soft_clipping(mh, N_FILES, sds, rf_info->strand_B);
+	match_indels(mh, sds, rf_info);
 	
 	double *pp[N_FILES] = {NULL}; // = malloc(N_FILES * sizeof(*pp));
 	double *ll[N_FILES] = {NULL}; // = malloc(N_FILES * sizeof(*ll));
@@ -941,9 +942,12 @@ int main(int argc, const char *argv[])
 			"in reference %s\n", rf_info->alignment_start[j] + 1,
 			rf_info->alignment_end[j], csome_names[j]);
 
-		extract_ref(opt_rf.samtools_command, csome_names[j], //opt.ref_names[j],
+		if ((err = extract_ref(opt_rf.samtools_command, csome_names[j],
 			rf_info->alignment_start[j], rf_info->alignment_end[j],
-			opt.fsa_files[j], opt_rf.extracted_rf[j], &opt_rf);
+			opt.fsa_files[j], opt_rf.extracted_rf[j], &opt_rf)))
+			exit(mmessage(ERROR_MSG, INVALID_USER_INPUT, "Could not"
+				" extract target regions from reference FASTA "
+								"files.\n"));
 
 		/* read in reference genomes */
 		if ((err = read_fastq(opt_rf.extracted_rf[j], &fds[j], &fop)))
@@ -986,11 +990,11 @@ int main(int argc, const char *argv[])
 		//if (sds[0]->se[me->indices[0][0]].pos - 1 <= 31336805 && sds[0]->se[me->indices[0][0]].pos - 1 + sds[0]->se[me->indices[0][0]].cig->length_rf > 31336805) {
 		//if (sds[0]->se[me->indices[0][0]].pos - 1 <= 1372343 && sds[0]->se[me->indices[0][0]].pos - 1 + sds[0]->se[me->indices[0][0]].cig->length_rf > 1372343) {
 		//if (sds[0]->se[me->indices[0][0]].pos - 1 <= 4392400 && sds[0]->se[me->indices[0][0]].pos - 1 + sds[0]->se[me->indices[0][0]].cig->length_rf > 4392400) {
-/*
-		if (sds[0]->se[me->indices[0][0]].pos - 1 <= 112588027 && sds[0]->se[me->indices[0][0]].pos - 1 + sds[0]->se[me->indices[0][0]].cig->length_rf > 112588027) {
+		if (sds[0]->se[me->indices[0][0]].pos - 1 <= 31076736 && sds[0]->se[me->indices[0][0]].pos - 1 + sds[0]->se[me->indices[0][0]].cig->length_rf > 31076736) {
 			debug_level = DEBUG_III;
 			show = 1;
 		}
+/*
  */
 		index_read_to_ref(rf_info, sds, me);
 		for (unsigned int j = 0; j < N_FILES; ++j) {
@@ -1314,10 +1318,10 @@ int main(int argc, const char *argv[])
 	}
 	//the reference index of A AND B should be adjusted according to the cigar string, this only genotype on the site that are not -/A or A/-
 
-	//debug_level = DEBUG_II;
+	debug_level = DEBUG_II;
 	/* finally: march along reference positions and genotype */
-	for (size_t posA = start_target[0]; posA < end_target[0]; ++posA) {
-	//for (size_t posA = 112588027; posA <= 112588027; ++posA) {
+	//for (size_t posA = start_target[0]; posA < end_target[0]; ++posA) {
+	for (size_t posA = 31076736; posA <= 31076736; ++posA) {
 		//ref_entry *re = rf_info;
 		size_t target_a = posA; 			/* 0-based, absolute position and ... */
 		size_t site = target_a - start_target[0];	/* relative position in aligned region of subgenome A */
@@ -2444,7 +2448,7 @@ double ll_align(ref_info *rfi, unsigned int sg_id, sam_entry *se,
 	int mapped_rf_idx = -1;			/* reference index of candidate alternative mapping */
 	unsigned int mapped_rf_len = 0;		/* length of candidate alternative mapping */
 	unsigned char show = *in_show;
-	unsigned char try_alternative_alignment = 1;
+	unsigned char try_alternative_alignment = 0;
 
 	/* control display during debugging */
 	int display_dot = 1;						/* display dot for match */
@@ -2586,14 +2590,14 @@ debug_msg(fxn_debug>=DEBUG_II, fxn_debug, "sg=%u rc=%u rd_idx=%zu arf_idx=%zu Al
 	rfi->alignment_start[sg_id], rfi->alignment_end[sg_id],
 	rfi->start_A, rfi->end_A);
 debug_msg_cont(fxn_debug>=DEBUG_II, fxn_debug, " rrf_idxA=%d ->", 
-	arf_index>= rfi->start_A
+	arf_index >= rfi->start_A
 		&& arf_index < rfi->end_A ?
 		(int)(arf_index - rfi->start_A) : -1);
-debug_msg_cont(fxn_debug>=DEBUG_II, fxn_debug, " rrf_idxB=%d",
+debug_msg_cont(fxn_debug>=DEBUG_II, fxn_debug, " B_rrf_idx=%d",
 	arf_index >= rfi->start_A && arf_index < rfi->end_A ?
-	rfi->map_A_to_B[arf_index - rfi->start_A] : -2);
-debug_msg_cont(fxn_debug>=DEBUG_II, fxn_debug, " (rrf_idxB=%d", rfi->read_to_ref[!sg_id][rfi->strand_B ? se->read->len - rd_index - j - 1 : rd_index + j]);
-debug_msg_cont(fxn_debug>=DEBUG_II, fxn_debug, " -> rf_idxA=%d)\n", 
+	rfi->map_A_to_B[arf_index - rfi->start_A] : ALIGN_OUTSIDE);
+debug_msg_cont(fxn_debug>=DEBUG_II, fxn_debug, " (altB_rrf_idx=%d", rfi->read_to_ref[!sg_id][rfi->strand_B ? se->read->len - rd_index - j - 1 : rd_index + j]);
+debug_msg_cont(fxn_debug>=DEBUG_II, fxn_debug, " -> altA_rf_idx=%d)\n", 
 	rfi->read_to_ref[!sg_id][rfi->strand_B ? se->read->len - rd_index - j - 1 : rd_index + j] >= 0 ? rfi->map_B_to_A[rfi->read_to_ref[!sg_id][rfi->strand_B ? se->read->len - rd_index - j - 1 : rd_index + j]] : -1);
 } else if (fxn_debug>=DEBUG_II) {
 debug_msg(fxn_debug>=DEBUG_II, fxn_debug, "sg=%u rc=%u rd_idx=%zu arf_idx=%zu Align [%zu, %zu) Target [%zu, %zu)",
@@ -2604,21 +2608,21 @@ debug_msg(fxn_debug>=DEBUG_II, fxn_debug, "sg=%u rc=%u rd_idx=%zu arf_idx=%zu Al
 debug_msg_cont(fxn_debug>=DEBUG_II, fxn_debug, " rrf_idxB=%d ->", 
 	arf_index >= rfi->start_B && arf_index < rfi->end_B ?
 		(int)(arf_index - rfi->start_B) : -1);
-debug_msg_cont(fxn_debug>=DEBUG_II, fxn_debug, " rrf_idxB=%d",
+debug_msg_cont(fxn_debug>=DEBUG_II, fxn_debug, " A_rrf_idx=%d",
 	arf_index >= rfi->start_B && arf_index < rfi->end_B ?
-	rfi->map_A_to_B[arf_index - rfi->start_B] : -2);
-debug_msg_cont(fxn_debug>=DEBUG_II, fxn_debug, " (rrf_idxA=%d", rfi->read_to_ref[!sg_id][rfi->strand_B ? se->read->len - rd_index - j - 1 : rd_index + j]);
-debug_msg_cont(fxn_debug>=DEBUG_II, fxn_debug, " -> rf_idxB=%d)\n", 
+	rfi->map_B_to_A[arf_index - rfi->start_B] : ALIGN_OUTSIDE);
+debug_msg_cont(fxn_debug>=DEBUG_II, fxn_debug, " (altA_rrf_idx=%d", rfi->read_to_ref[!sg_id][rfi->strand_B ? se->read->len - rd_index - j - 1 : rd_index + j]);
+debug_msg_cont(fxn_debug>=DEBUG_II, fxn_debug, " -> alt_Brf_idx=%d)\n", 
 	rfi->read_to_ref[!sg_id][rfi->strand_B ? se->read->len - rd_index - j - 1 : rd_index + j] >= 0 ? rfi->map_A_to_B[rfi->read_to_ref[!sg_id][rfi->strand_B ? se->read->len - rd_index - j - 1 : rd_index + j]] : -1);
 }
 			/* compute likelihood of read nucleotides aligned
 			 * before/after the target or to terminal indels in the
-			 * subgenome alignment (coded as -2)
+			 * subgenome alignment (ALIGN_OUTSIDE)
 			 */
 			if ((!sg_id && (arf_index < rfi->start_A || arf_index >= rfi->end_A
-					|| rfi->map_A_to_B[arf_index - rfi->start_A] != -1))
+					|| rfi->map_A_to_B[arf_index - rfi->start_A] >= 0))
 				|| (sg_id && (arf_index < rfi->start_B || arf_index >= rfi->end_B
-					|| rfi->map_B_to_A[arf_index - rfi->start_B] != -1))) {
+					|| rfi->map_B_to_A[arf_index - rfi->start_B] >= 0))) {
 
 				/* had an alternative alignment going */
 				if (try_alternative_alignment && mapped_rf_idx >= 0) {

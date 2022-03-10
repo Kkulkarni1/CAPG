@@ -109,7 +109,7 @@ int read_sam(FILE *fp, sam **s_in, unsigned char, unsigned char);
 int read_bam(gzFile gzfp, sam **s_in);
 
 /* processing */
-int hash_sam(sam *s, sam_hash **sh_in, int hash_on, size_t n_ref, unsigned char drop_unmapped, unsigned char drop_second, unsigned int drop_soft_clipped, unsigned int drop_indel, unsigned int min_length, unsigned int max_length, double max_exp_err);
+int hash_sam(sam *s, sam_hash **sh_in, int hash_on, size_t n_ref, unsigned char drop_unmapped, unsigned char drop_second, unsigned char drop_supplementary, unsigned int drop_soft_clipped, unsigned int drop_indel, unsigned int min_length, unsigned int max_length, double max_exp_err);
 size_t hash_merge(merge_hash **mh, unsigned int nfiles, sam **sds, size_t *rindex);
 int fill_hash(sam *s, sam_hash *sh, unsigned int n_ref);
 /* output */

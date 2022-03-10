@@ -74,7 +74,8 @@ struct _options {
 					 * in either alignment
 					 */
 	unsigned char proptest_screen;	/*<! {0,1,2,3} drop reads according to abundance test */
-	unsigned char drop_secondary;	/*<! drop secondary alignments */
+	unsigned char drop_secondary;		/*<! drop secondary alignments */
+	unsigned char drop_supplementary;	/*<! drop supplementary alignments */
 	unsigned char equal_homolog_coverage_test; /*<! perform equal coverage test */
 	unsigned char posthoc_coverage_test;	/*<! perform post hoc coverage test */
 	/* this is how we ran CAPG: references are chrom:start-end,

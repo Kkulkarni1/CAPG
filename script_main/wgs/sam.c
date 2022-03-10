@@ -660,6 +660,7 @@ void reverse_in_place(sam_entry *se) {
  * [TODO] interpretation.  Or drop them from memory, but that is not so easy.
  * @param drop_unmapped	filter: drop unmapped reads
  * @param drop_second	filter: discard secondary alignments
+ * @param drop_sup	filter: discard supplementary alignments
  * @param drop_sc	filter: discard soft-clips of minimum length drop_sc
  * @param drop_id	filter: discard indels of minimum length drop_id
  * @param min_len	filter: minimum length (0 does nothing)
@@ -675,6 +676,7 @@ hash_sam (
 	size_t n_ref,
 	unsigned char drop_unmapped,
 	unsigned char drop_second,
+	unsigned char drop_sup,
 	unsigned int drop_sc,
 	unsigned int drop_id,
 	unsigned int min_length,
@@ -684,6 +686,7 @@ hash_sam (
 	int fxn_debug = ABSOLUTE_SILENCE;//DEBUG_II;//DEBUG_I;//
 	size_t n_unmapped = 0;
 	size_t n_secondary = 0;
+	size_t n_supplementary = 0;
 	size_t n_min_length = 0;
 	size_t n_max_length = 0;
 	size_t n_experr = 0;
@@ -730,10 +733,18 @@ hash_sam (
 		}
 
 		/* discard secondary alignments */
-		if (drop_second && se->flag >> 11 & 1) {
+		if (drop_second && se->flag >> 8 & 1) {
 			se->exclude = 1;
 			debug_msg_cont(fxn_debug >= DEBUG_I, fxn_debug, "remove %s secondary alignment\n", se->name);
 			++n_secondary;
+			continue;
+		}
+
+		/* discard supplementary alignments */
+		if (drop_sup && se->flag >> 11 & 1) {
+			se->exclude = 1;
+			debug_msg_cont(fxn_debug >= DEBUG_I, fxn_debug, "remove %s supplementary alignment\n", se->name);
+			++n_supplementary;
 			continue;
 		}
 
@@ -858,6 +869,10 @@ hash_sam (
 	if (drop_second)
 		mmessage(INFO_MSG, NO_ERROR, "%zu secondary alignments "
 						"filtered\n", n_secondary);
+
+	if (drop_sup)
+		mmessage(INFO_MSG, NO_ERROR, "%zu supplementary alignments "
+						"filtered\n", n_supplementary);
 
 	if (min_length || max_length)
 		mmessage(INFO_MSG, NO_ERROR, "(%zu, %zu) reads filtered because"

@@ -74,6 +74,7 @@ void ll_all_align(sam *sds, char const *ref_file);
 void default_options_rf(options_rf *opt);
 int make_targets_info(options_rf *opt, ref_info **ref_info, char const *ref_names[]);
 int pickreads(ref_info *ref_info, sam **sds, char const **csome_names);
+int match_indels(merge_hash *mh, sam **sds, ref_info *rfi);
 int parse_rf_options(options_rf *opt, int argc, char *argv[]);
 int extract_ref(char const *samtools_command, char const *ref_name, size_t ref_start, size_t ref_end, char const *ref_file, char const *ext_rf, options_rf *opt);
 void output_selected_reads(char const *f, sam **sds, merge_hash *mh);

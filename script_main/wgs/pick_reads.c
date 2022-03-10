@@ -558,14 +558,18 @@ int match_indels(merge_hash *mh, sam **sds, ref_info *rfi)
 		unsigned char in_discrepancy = 0;
 		double lla = 0, llb = 0;
 
+		debug_msg(fxn_debug, fxn_debug, "Read %s\n", se->name);
+
 		for (unsigned int i = 0; i < se->cig->n_ashes; ++i) {
 			if (se->cig->ashes[i].type == CIGAR_SKIP) {
 				return(mmessage(ERROR_MSG, INTERNAL_ERROR, "cannot handle cigar skips"));
 			} else if (se->cig->ashes[i].type == CIGAR_SOFT_CLIP) {
 				/* these have already been matched across read alignments */
 				rd_idx += se->cig->ashes[i].len;
+				debug_msg(fxn_debug, fxn_debug, "Read %s: %dS (rd_idx=%u)\n", se->name, se->cig->ashes[i].len, rd_idx);
 				continue;
 			} else if (se->cig->ashes[i].type == CIGAR_DELETION) {
+				debug_msg(fxn_debug, fxn_debug, "Read %s: %dD (rd_idx=%u)\n", se->name, se->cig->ashes[i].len, rd_idx);
 				if (in_discrepancy) {
 					/* what to do? */
 					for (unsigned int j = 0; j < se->cig->ashes[i].len; ++j) {
@@ -577,6 +581,7 @@ int match_indels(merge_hash *mh, sam **sds, ref_info *rfi)
 							IUPAC_ENCODING, XY_ENCODING,
 							MAX_ILLUMINA_QUALITY_SCORE, 1, (void *) &mls);
 							//get_qual(se->qual, rd_idx + j), 1, (void *) &mls);
+						debug_msg(fxn_debug, fxn_debug, "Read %s: lla=%f (rd_idx=%u)\n", se->name, lla, rd_idx);
 					}
 				}
 				continue;
@@ -587,6 +592,8 @@ int match_indels(merge_hash *mh, sam **sds, ref_info *rfi)
 				continue;
 			}
 
+			debug_msg(fxn_debug, fxn_debug, "Read %s: %d%c (rd_idx=%u)\n", se->name, se->cig->ashes[i].type == CIGAR_INSERTION ? 'I' : 'M', rd_idx);
+
 			for (unsigned int j = 0; j < se->cig->ashes[i].len; ++j) {
 				int rf_idx = rfi->read_to_ref[0][rd_idx + j];		/* sgA index in A alignment */
 				int other_rf_idx = rfi->read_to_ref[1][rd_idx + j];	/* sgB index in B alignment */
@@ -596,6 +603,8 @@ int match_indels(merge_hash *mh, sam **sds, ref_info *rfi)
 				int alt_other_rf_idx = rf_idx >= 0
 					? rfi->map_A_to_B[rf_idx]	/* sgB index implied by A alignment */
 					: rf_idx;
+
+				debug_msg(fxn_debug, fxn_debug, "Read %s (rd_idx=%u): rf_idx=%d, other_rf_idx=%d, alt_rf_idx=%d, alt_other_rf_idx\n", se->name, rd_idx + j, rf_idx, other_rf_idx, alt_rf_idx, alt_other_rf_idx);
 
 				/* exit discrepancy */
 				if (rf_idx >= 0 && rf_idx == alt_rf_idx) {
@@ -631,6 +640,7 @@ int match_indels(merge_hash *mh, sam **sds, ref_info *rfi)
 								//match_indel(me, sds, rfi, last_rd_idx, rd_idx, 1);
 							}
 						}
+						debug_msg(fxn_debug, fxn_debug, "Read %s (rd_idx=%u): (%u, %u) subgenome %c wins (%f <=> %f)\n", se->name, rd_idx + j, last_rd_idx, rd_idx, homoeologous_sites[n_homoeologous_sites - 1] ? 'B' : 'A', lla, llb);
 						lla = llb = 0;
 					} else if (!in_discrepancy) {
 						homoeologous_sites[0] = rd_idx;
@@ -727,6 +737,7 @@ int match_indels(merge_hash *mh, sam **sds, ref_info *rfi)
 						last_other_rf_idx = other_rf_idx;
 					}
 				}
+				debug_msg(fxn_debug, fxn_debug, "Read %s (rd_idx=%u): lla=%f llb=%f\n", se->name, rd_idx + j, lla, llb);
 			}
 			rd_idx += se->cig->ashes[i].len;
 		}

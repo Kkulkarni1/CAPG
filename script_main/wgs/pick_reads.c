@@ -19,8 +19,6 @@
 #include "pick_reads.h"
 #include "order.h"
 
-int match_indels(merge_hash *mh, sam **sds, ref_info *rfi);
-
 int soft_clip_alignment(sam_entry *se, unsigned int fiveprime_sc, unsigned int threeprime_sc, int rc);
 int match_indel(merge_hash *me, sam **sds, ref_info *rfi, unsigned int start_rd_idx, unsigned int end_rd_idx, unsigned int sg_idx);
 
@@ -537,7 +535,13 @@ int index_read_to_ref(ref_info *rfi, sam *sds[N_FILES], merge_hash *me)
 int match_indels(merge_hash *mh, sam **sds, ref_info *rfi)
 {
 	int fxn_debug = ABSOLUTE_SILENCE;//DEBUG_I;//
+	unsigned int n_buffer = 10, n_homoeologous_sites = 0;
 	mlogit_stuff mls = {NULL, 0};
+	unsigned int *homoeologous_sites = malloc((n_buffer+1) * sizeof(*homoeologous_sites));
+	unsigned char *winning_subgenome = malloc(n_buffer * sizeof(*winning_subgenome));
+
+	if (!homoeologous_sites || !winning_subgenome)
+		return(mmessage(ERROR_MSG, MEMORY_ALLOCATION, "homoeologous_sites"));
 
 	for (merge_hash *me = mh; me != NULL; me = me->hh.next) {
 
@@ -599,19 +603,37 @@ int match_indels(merge_hash *mh, sam **sds, ref_info *rfi)
 						exit(mmessage(ERROR_MSG, INTERNAL_ERROR,
 							"Homoeologous alignment in sgA, but not sgB!\n"));
 					if (in_discrepancy && rd_idx + j > last_rd_idx + 1) {
+						if (n_homoeologous_sites + 1 == n_buffer) {
+							n_buffer *= 2;
+							homoeologous_sites = realloc(homoeologous_sites, (n_buffer+1) * sizeof(*homoeologous_sites));
+							winning_subgenome = realloc(winning_subgenome, n_buffer * sizeof(*winning_subgenome));
+							if (!homoeologous_sites || !winning_subgenome)
+								return(mmessage(ERROR_MSG, MEMORY_ALLOCATION, "homoeologous_sites"));
+						}
 						if (lla > llb) {
-							match_indel(me, sds, rfi, last_rd_idx, rd_idx, 0);
+							winning_subgenome[n_homoeologous_sites] = 0;
+							homoeologous_sites[++n_homoeologous_sites] = rd_idx;
+							//match_indel(me, sds, rfi, last_rd_idx, rd_idx, 0);
 						} else if (llb > lla) {
-							match_indel(me, sds, rfi, last_rd_idx, rd_idx, 1);
+							winning_subgenome[n_homoeologous_sites] = 1;
+							homoeologous_sites[++n_homoeologous_sites] = rd_idx;
+							//match_indel(me, sds, rfi, last_rd_idx, rd_idx, 1);
 						} else {
 							double r = (double) rand() / RAND_MAX;
 	
-							if (r < 0.5)
-								match_indel(me, sds, rfi, last_rd_idx, rd_idx, 0);
-							else
-								match_indel(me, sds, rfi, last_rd_idx, rd_idx, 1);
+							if (r < 0.5) {
+								winning_subgenome[n_homoeologous_sites] = 0;
+								homoeologous_sites[++n_homoeologous_sites] = rd_idx;
+								//match_indel(me, sds, rfi, last_rd_idx, rd_idx, 0);
+							} else {
+								winning_subgenome[n_homoeologous_sites] = 1;
+								homoeologous_sites[++n_homoeologous_sites] = rd_idx;
+								//match_indel(me, sds, rfi, last_rd_idx, rd_idx, 1);
+							}
 						}
 						lla = llb = 0;
+					} else if (!in_discrepancy) {
+						homoeologous_sites[0] = rd_idx;
 					}
 					in_discrepancy = 1;
 					last_rd_idx = rd_idx;	/* last read index involved in homoeologous alignment */
@@ -708,7 +730,10 @@ int match_indels(merge_hash *mh, sam **sds, ref_info *rfi)
 			}
 			rd_idx += se->cig->ashes[i].len;
 		}
+		for (unsigned int i = 0; i < n_homoeologous_sites; ++i)
+			match_indel(me, sds, rfi, homoeologous_sites[i], homoeologous_sites[i+1], winning_subgenome[i]);
 	}
+
 
 	return NO_ERROR;
 } /* match_indels */

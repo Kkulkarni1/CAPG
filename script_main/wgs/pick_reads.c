@@ -20,7 +20,7 @@
 #include "order.h"
 
 int soft_clip_alignment(sam_entry *se, unsigned int fiveprime_sc, unsigned int threeprime_sc, int rc);
-int match_indel(merge_hash *me, sam **sds, ref_info *rfi, unsigned int start_rd_idx, unsigned int end_rd_idx, unsigned int sg_idx);
+int match_indel(merge_hash *me, sam **sds, ref_info *rfi, unsigned int start_rd_idx, unsigned int end_rd_idx, unsigned int winning_sg);
 
 char const *alignment_state_to_string[ALIGN_STATES] = {"M", "D", "I", "S", "O"};
 
@@ -809,29 +809,30 @@ debug_msg(fxn_debug, fxn_debug, "Read %s (other_rf_idx=%d): %c (q=%c) -> %c (llb
  * @param rfi		reference information
  * @param start_rd_idx	index of read nucleotide of 5' homoeologous alignment
  * @param end_rd_idx	index of read nucleotide of 3' homoeologous alignment
- * @param sg_idx	which subgenome has the "better" alignment
+ * @param winning_sg	which subgenome has the "better" alignment
  * @return		error status
  */
-int match_indel(merge_hash *me, sam **sds, ref_info *rfi, unsigned int start_rd_idx, unsigned int end_rd_idx, unsigned int sg_idx)
+int match_indel(merge_hash *me, sam **sds, ref_info *rfi, unsigned int start_rd_idx, unsigned int end_rd_idx, unsigned int winning_sg)
 {
 	int fxn_debug = DEBUG_I;//ABSOLUTE_SILENCE;//
 
-	/* this alignment */
-	sam_entry *se = &sds[!sg_idx]->se[me->indices[!sg_idx][0]];
+	/* old alignment that will be replaced */
+	sam_entry *se = &sds[!winning_sg]->se[me->indices[!winning_sg][0]];
 	unsigned char in_region = 0;
 
 	/* other subgenome reference index aligned to homoeologous site right before discrepant region */
-	int other_rf_idx = rfi->read_to_ref[sg_idx][start_rd_idx];
-	unsigned int last_other_rf_idx = (unsigned int) other_rf_idx;	/* safe cast */
+	int winning_rf_idx = rfi->read_to_ref[winning_sg][start_rd_idx];
+	int alt_rf_idx = winning_sg ? rfi->map_B_to_A[winning_rf_idx] : rfi->map_A_to_B[winning_rf_idx];
+	unsigned int last_alt_rf_idx = (unsigned int) alt_rf_idx;	/* safe cast */
 	int prev_ash = ALIGN_MATCH;	/* previous homoeologous site is a match */
 	unsigned int n_old_ashes = 0, n_new_ashes = 0;
 	unsigned int rd_idx = 0;
 
-	debug_msg(fxn_debug, fxn_debug, "Read %s: sg_idx=%d, start_rd_idx=%u, end_rd_idx=%u, other_rf_idx=%d\n", se->name, sg_idx, start_rd_idx, end_rd_idx, other_rf_idx);
+	debug_msg(fxn_debug, fxn_debug, "Read %s: winning_sg=%d, start_rd_idx=%u, end_rd_idx=%u, winning_rf_idx=%d\n", se->name, winning_sg, start_rd_idx, end_rd_idx, winning_rf_idx);
 
 	/* count number of old and new ashes in the discrepant region */
 	for (unsigned int j = 0; j < se->cig->n_ashes; ++j) {
-		debug_msg(fxn_debug, fxn_debug, "Read %s: %u%c\n", se->name, se->cig->ashes[j].len, cigar_char[se->cig->ashes[j].type]);
+		debug_msg(fxn_debug, fxn_debug, "Read %s: %u%c (rd_idx=%u, in_region=%u n_ashes=(%u -> %u))\n", se->name, se->cig->ashes[j].len, cigar_char[se->cig->ashes[j].type], rd_idx, in_region, n_old_ashes, n_new_ashes);
 		if (se->cig->ashes[j].type == CIGAR_SOFT_CLIP) {
 			rd_idx += se->cig->ashes[j].len;
 			if (in_region) /* cannot be */
@@ -855,64 +856,75 @@ int match_indel(merge_hash *me, sam **sds, ref_info *rfi, unsigned int start_rd_
 
 		/* walk through insertion or match */
 		for (unsigned int k = 0; k < se->cig->ashes[j].len; ++k) {
+			winning_rf_idx = rfi->read_to_ref[winning_sg][rd_idx + k];	/* winning reference index aligned to this read nucleotide */
+			alt_rf_idx = winning_rf_idx >= 0				/* alternative reference index learned from winning alignment */
+				? winning_sg ? rfi->map_B_to_A[winning_rf_idx]
+					: rfi->map_A_to_B[winning_rf_idx]	/* A ref index or ALIGN_INSERTION or ALIGN_DELETION */
+				: ALIGN_INSERTION;
+
 
 			/* stepping out of region */
 			if (in_region && rd_idx + k >= end_rd_idx) {
 				if (!k)	/* actually ends with this new ash */
 					--n_old_ashes;
 				in_region = 0;
+
+				if (alt_rf_idx < 0)
+					exit(mmessage(ERROR_MSG, INTERNAL_ERROR, "Impossible.\n"));
+
+				/* there must have been a deletion in new alignment */
+				if ((unsigned int) alt_rf_idx > last_alt_rf_idx + 1) {
+					++n_new_ashes;
+					prev_ash = ALIGN_DELETION;
+					debug_msg(fxn_debug, fxn_debug, "Read %s: Ending new alignment with %uD\n", se->name, (alt_rf_idx - last_alt_rf_idx));
+				}
+
 				break;
 
 			/* continuing in region */
 			} else if (in_region) {
-				other_rf_idx = rfi->read_to_ref[!sg_idx][rd_idx + k];		/* other reference index aligned to this read nucleotide */
-				int alt_rf_idx = other_rf_idx >= 0
-					? sg_idx ? rfi->map_A_to_B[other_rf_idx]
-						: rfi->map_B_to_A[other_rf_idx]	/* A ref index or ALIGN_INSERTION or ALIGN_DELETION */
-					: ALIGN_INSERTION;
-
-				/* there must have been a deletion in other subgenome alignment */
-				if (other_rf_idx >= 0 && (unsigned int) other_rf_idx > last_other_rf_idx + 1) {
+				/* there must have been a deletion in winning alignment */
+				if (alt_rf_idx >= 0 && (unsigned int) alt_rf_idx > last_alt_rf_idx + 1) {
 					++n_new_ashes;
 					prev_ash = ALIGN_DELETION;
+					debug_msg(fxn_debug, fxn_debug, "Read %s: adding %uD\n", se->name, (alt_rf_idx - last_alt_rf_idx));
 				}
 
 				/* entering new match region */
 				if (alt_rf_idx >= 0 && prev_ash != ALIGN_MATCH) {
 					++n_new_ashes;
 					prev_ash = ALIGN_MATCH;
+					debug_msg(fxn_debug, fxn_debug, "Read %s: starting M\n", se->name);
 
 				/* entering new ash */
 				} else if (alt_rf_idx != prev_ash) {
 					++n_new_ashes;
 					prev_ash = alt_rf_idx;
+					debug_msg(fxn_debug, fxn_debug, "Read %s: starting %s\n", se->name, alignment_state_to_string[alt_rf_idx]);
 				}
 
 				/* record last consumed index of sgB reference */
-				if (other_rf_idx >= 0)
-					last_other_rf_idx = other_rf_idx;
+				if (alt_rf_idx >= 0)
+					last_alt_rf_idx = alt_rf_idx;
 
 			/* entering region: must enter homoeologous INDEL */
 			} else if (!in_region && rd_idx + k > start_rd_idx) {
-				other_rf_idx = rfi->read_to_ref[!sg_idx][rd_idx + k];
-				int alt_rf_idx = other_rf_idx >= 0
-					? sg_idx ? rfi->map_A_to_B[other_rf_idx]
-						: rfi->map_B_to_A[other_rf_idx]	/* ALIGN_INSERTION or ALIGN_DELETION */
-					: ALIGN_INSERTION;
 
 				/* there must have been a deletion in sgB alignment */
-				if (other_rf_idx >= 0 && (unsigned int) other_rf_idx > last_other_rf_idx + 1) {
+				if (alt_rf_idx >= 0 && (unsigned int) alt_rf_idx > last_alt_rf_idx + 1) {
 					++n_new_ashes;
 					prev_ash = ALIGN_DELETION;
+					debug_msg(fxn_debug, fxn_debug, "Read %s: adding %uD\n", se->name, (alt_rf_idx - last_alt_rf_idx));
 				}
 
 				++n_new_ashes;
 				prev_ash = alt_rf_idx;
 				in_region = 1;
+				debug_msg(fxn_debug, fxn_debug, "Read %s: entering region with %s\n", se->name, alignment_state_to_string[prev_ash]);
 
 				/* record last consumed index of sgB reference */
-				if (other_rf_idx >= 0)
-					last_other_rf_idx = other_rf_idx;
+				if (alt_rf_idx >= 0)
+					last_alt_rf_idx = alt_rf_idx;
 			}
 		}
 		rd_idx += se->cig->ashes[j].len;
@@ -927,11 +939,14 @@ int match_indel(merge_hash *me, sam **sds, ref_info *rfi, unsigned int start_rd_
 
 		if (!ashes)
 			return(mmessage(ERROR_MSG, MEMORY_ALLOCATION, "ashes"));
+
+		debug_msg(fxn_debug, fxn_debug, "Read %s: allocating new cigar with %d change in ashes.\n", se->name, n_new_ashes - n_old_ashes);
 	}
 
 	/* build the new cigar for this subgenome alignment based on other selected subgenome alignment */
 	rd_idx = 0;	/* this is read nucleotide with homoeologous alignment right before the discrepant region */
-	last_other_rf_idx = rfi->read_to_ref[sg_idx][start_rd_idx];
+	winning_rf_idx = rfi->read_to_ref[winning_sg][start_rd_idx];
+	last_alt_rf_idx = alt_rf_idx = winning_sg ? rfi->map_B_to_A[winning_rf_idx] : rfi->map_A_to_B[winning_rf_idx];
 	prev_ash = ALIGN_MATCH;
 	unsigned int n_ash = 0;
 	for (unsigned int j = 0; j < se->cig->n_ashes; ++j) {
@@ -953,9 +968,22 @@ int match_indel(merge_hash *me, sam **sds, ref_info *rfi, unsigned int start_rd_
 
 		/* insertion or match */
 		for (unsigned int k = 0; k < se->cig->ashes[j].len; ++k) {
+			winning_rf_idx = rfi->read_to_ref[winning_sg][rd_idx + k];
+			alt_rf_idx = winning_rf_idx >= 0
+				? winning_sg
+					? rfi->map_B_to_A[winning_rf_idx]	/* A ref index or ALIGN_INSERTION or ALIGN_DELETION */
+					: rfi->map_A_to_B[winning_rf_idx]	/* A ref index or ALIGN_INSERTION or ALIGN_DELETION */
+				: ALIGN_INSERTION;	/* between homoeologous alignments, this is the only option for a non-aligned read nucleotide */
 
 			/* stepping out of region */
 			if (in_region && rd_idx + k >= end_rd_idx) {
+				/* there must have been a deletion in other subgenome alignment */
+				if (alt_rf_idx >= 0 && (unsigned int) alt_rf_idx > last_alt_rf_idx + 1) {
+					ashes[n_ash].type = CIGAR_DELETION;
+					ashes[n_ash++].len = alt_rf_idx - last_alt_rf_idx;
+					prev_ash = ALIGN_DELETION;
+				}
+
 				/* take rest of old ash */
 				if (prev_ash != se->cig->ashes[j].type) {
 					ashes[n_ash].type = se->cig->ashes[j].type;
@@ -965,17 +993,11 @@ int match_indel(merge_hash *me, sam **sds, ref_info *rfi, unsigned int start_rd_
 
 			/* continuing in region */
 			} else if (in_region) {
-				other_rf_idx = rfi->read_to_ref[!sg_idx][rd_idx + k];
-				int alt_rf_idx = other_rf_idx >= 0
-					? sg_idx
-						? rfi->map_A_to_B[other_rf_idx]	/* A ref index or ALIGN_INSERTION or ALIGN_DELETION */
-						: rfi->map_B_to_A[other_rf_idx]	/* A ref index or ALIGN_INSERTION or ALIGN_DELETION */
-					: ALIGN_INSERTION;	/* between homoeologous alignments, this is the only option for a non-aligned read nucleotide */
 
-				/* there must have been a deletion in other subgenome alignment */
-				if (other_rf_idx >= 0 && (unsigned int) other_rf_idx > last_other_rf_idx + 1) {
+				/* there must have been a deletion induced in new alignment */
+				if (alt_rf_idx >= 0 && (unsigned int) alt_rf_idx > last_alt_rf_idx + 1) {
 					ashes[n_ash].type = CIGAR_DELETION;
-					ashes[n_ash++].len = other_rf_idx - last_other_rf_idx;
+					ashes[n_ash++].len = alt_rf_idx - last_alt_rf_idx;
 					prev_ash = ALIGN_DELETION;
 				}
 
@@ -996,26 +1018,26 @@ int match_indel(merge_hash *me, sam **sds, ref_info *rfi, unsigned int start_rd_
 					++ashes[n_ash].len;
 				}
 
-				/* record last consumed index of sgB reference */
-				if (other_rf_idx >= 0)
-					last_other_rf_idx = other_rf_idx;
+				/* record last consumed index of new alignment */
+				if (alt_rf_idx >= 0)
+					last_alt_rf_idx = alt_rf_idx;
 
 			/* entering region: must enter homoeologous INDEL, because
 			 * if it was a match, we'd just have another homoeologous
 			 * match
 			 */
 			} else if (!in_region && rd_idx + k > start_rd_idx) {
-				other_rf_idx = rfi->read_to_ref[!sg_idx][rd_idx + k];
-				int alt_rf_idx = other_rf_idx >= 0
-					? sg_idx
-						? rfi->map_A_to_B[other_rf_idx]
-						: rfi->map_B_to_A[other_rf_idx]	/* ALIGN_INSERTION or ALIGN_DELETION */
+				winning_rf_idx = rfi->read_to_ref[!winning_sg][rd_idx + k];
+				alt_rf_idx = winning_rf_idx >= 0
+					? winning_sg
+						? rfi->map_B_to_A[winning_rf_idx]
+						: rfi->map_A_to_B[winning_rf_idx]	/* ALIGN_INSERTION or ALIGN_DELETION */
 					: ALIGN_INSERTION;
 
 				/* there must have been a deletion in other subgenome alignment */
-				if (other_rf_idx >= 0 && (unsigned int) other_rf_idx > last_other_rf_idx + 1) {
+				if (alt_rf_idx >= 0 && (unsigned int) alt_rf_idx > last_alt_rf_idx + 1) {
 					ashes[n_ash].type = CIGAR_DELETION;
-					ashes[n_ash++].len = other_rf_idx - last_other_rf_idx;
+					ashes[n_ash++].len = alt_rf_idx - last_alt_rf_idx;
 					prev_ash = ALIGN_DELETION;
 				}
 
@@ -1035,9 +1057,9 @@ int match_indel(merge_hash *me, sam **sds, ref_info *rfi, unsigned int start_rd_
 				prev_ash = alt_rf_idx;
 				in_region = 1;
 
-				/* record last consumed index of sgB reference */
-				if (other_rf_idx >= 0)
-					last_other_rf_idx = other_rf_idx;
+				/* record last consumed index of new alignment */
+				if (alt_rf_idx >= 0)
+					last_alt_rf_idx = alt_rf_idx;
 			}
 		}
 		rd_idx += se->cig->ashes[j].len;

@@ -19,8 +19,11 @@ enum {
 	ALIGN_SOFT_CLIP = -3,	/* read soft clipped */
 	ALIGN_INSERTION = -2,
 	ALIGN_DELETION = -1,
-	ALIGN_MATCH = 0
+	ALIGN_MATCH = 0,
+	ALIGN_STATES = 5,
 };
+
+extern char const *alignment_state_to_string[ALIGN_STATES];
 
 typedef struct _ref_info ref_info;
 //typedef struct _ref_entry ref_entry;

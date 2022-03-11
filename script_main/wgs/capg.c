@@ -900,7 +900,6 @@ int main(int argc, const char *argv[])
 
 	/* match soft-clips so likelihood computed from same data in all subgenomes */
 	match_soft_clipping(mh, N_FILES, sds, rf_info->strand_B);
-	match_indels(mh, sds, rf_info);
 	
 	double *pp[N_FILES] = {NULL}; // = malloc(N_FILES * sizeof(*pp));
 	double *ll[N_FILES] = {NULL}; // = malloc(N_FILES * sizeof(*ll));
@@ -960,6 +959,8 @@ int main(int argc, const char *argv[])
 			exit(mmessage(ERROR_MSG, INTERNAL_ERROR, "Failed to "
 				"delete file '%s'\n", opt_rf.extracted_rf[j]));
 	}
+
+	match_indels(mh, sds, rf_info);
 
 	/* compute posterior probability read from each subgenome;
 	 * screen reads on minimum log likelihood

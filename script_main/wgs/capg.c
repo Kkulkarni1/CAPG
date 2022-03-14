@@ -961,6 +961,7 @@ int main(int argc, const char *argv[])
 	}
 
 	match_indels(mh, sds, rf_info);
+	debug_msg(1, 1, "Finished with match_indels()\n");
 
 	/* compute posterior probability read from each subgenome;
 	 * screen reads on minimum log likelihood
@@ -1541,8 +1542,12 @@ int main(int argc, const char *argv[])
 						ebaseA[obs_nuc[n_cover]] += covg_ll[0][n_cover]/sum;
 						ebaseB[obs_nuc[n_cover]] += covg_ll[1][n_cover]/sum;
 						++num_nuc[obs_nuc[n_cover]];
-						debug_msg(debug_level >= DEBUG_I, debug_level, "[SUCCESS] Read %s (%u) covers target %c at position %u in %u%c from (%zu-%zu) with nucleotide %c at rd_idx = %lu and pp[A]=%f\n",
-							se->name, n_read, iupac_to_char[ref_base[1]], target_b, se->cig->ashes[j].len, cigar_char[se->cig->ashes[j].type], rf_idx, rf_idx + se->cig->ashes[j].len, xy_to_char[obs_nuc[n_cover]], obs_rpos[n_cover], covg_ll[0][n_cover]/sum);
+						debug_msg(debug_level >= DEBUG_I, debug_level, "[SUCCESS] Read %s (%u) covers target %c at position %u in %u%c from (%zu-%zu) with nucleotide %c at rd_idx = %lu and pp[A]=%f (ll[A]=%f-%f, ll[B]=%f-%f\n",
+							se->name, n_read, iupac_to_char[ref_base[1]], target_b, se->cig->ashes[j].len, cigar_char[se->cig->ashes[j].type], rf_idx, rf_idx + se->cig->ashes[j].len, xy_to_char[obs_nuc[n_cover]], obs_rpos[n_cover], covg_ll[0][n_cover]/sum, ll[0][n_read], sub_prob_given_q_with_encoding(
+                                                                 ref_base[0],                   /* homozygous ref base */
+                                                                 obs_nuc[n_cover], IUPAC_ENCODING, XY_ENCODING, obs_q[n_cover], 1, (void *)&mls), ll[1][n_read], sub_prob_given_q_with_encoding(
+                                                                 ref_base[1],                   /* homozygous ref base */
+                                                                 obs_nuc[n_cover], IUPAC_ENCODING, XY_ENCODING, obs_q[n_cover], 1, (void *)&mls));
 						++n_cover;
 						break;
 					} else if (rf_idx + se->cig->ashes[j].len > target_b) {
@@ -1819,7 +1824,7 @@ int main(int argc, const char *argv[])
 							debug_msg(debug_level >= DEBUG_II, debug_level, "[Ref=%c, Alt=%c] Read %zu (%c,%d): Subgenome A %c%c -> %c%c M=(%d,%d): %f (%f-%f); Subgenome B %c%c -> %c%c M=(%d,%d): %f (%f-%f) (%f)\n", 
 								xy_to_char[nuc1], xy_to_char[nuc2], n_cover, xy_to_char[obs_nuc[n_cover]], obs_q[n_cover],
 								iupac_to_char[ref_base[0]], iupac_to_char[ref_base[0]],
-								g1<=1 ? xy_to_char[nuc1] : xy_to_char[nuc2], g1>=1 ? xy_to_char[nuc2] : xy_to_char[nuc1], g1, g2, tmp1, tmp1b, tmp1a,
+								g1<=1 ? xy_to_char[nuc1] : xy_to_char[nuc2], g1>=1 ? xy_to_char[nuc2] : xy_to_char[nuc1], g1, g2, tmp1, tmp1b, tmp1a, 
 								iupac_to_char[ref_base[1]], iupac_to_char[ref_base[1]],
 								g2<=1 ? xy_to_char[nuc1] : xy_to_char[nuc2], g2>=1 ? xy_to_char[nuc2] : xy_to_char[nuc1], g1, g2, tmp2, tmp2b, tmp2a, lprob[g1 * 3 + g2]);
 							++n_cover;
@@ -2449,7 +2454,7 @@ double ll_align(ref_info *rfi, unsigned int sg_id, sam_entry *se,
 	int mapped_rf_idx = -1;			/* reference index of candidate alternative mapping */
 	unsigned int mapped_rf_len = 0;		/* length of candidate alternative mapping */
 	unsigned char show = *in_show;
-	unsigned char try_alternative_alignment = 0;
+	unsigned char try_alternative_alignment = 0;	/* attempt to fix unaligned indels: now fixed with match_indels() */
 
 	/* control display during debugging */
 	int display_dot = 1;						/* display dot for match */
@@ -2578,10 +2583,14 @@ double ll_align(ref_info *rfi, unsigned int sg_id, sam_entry *se,
 			continue;
 		}
 
-		/* matches */
+		/* matches: only score homoeologous positions */
 		for (size_t j = 0; j < se->cig->ashes[i].len; ++j) {
 			unsigned int arf_index = rf_index + j + rfi->alignment_start[sg_id];
-			/* score this aligned read position unless it is covering an indel difference between subgenomes */
+			int ref0 = rfi->read_to_ref[0][rd_index + j];
+			int ref1 = rfi->read_to_ref[1][rd_index + j];
+			int aref0 = ref1 >= 0 ? rfi->map_B_to_A[ref1] : ref1;
+			int aref1 = ref0 >= 0 ? rfi->map_A_to_B[ref0] : ref0;
+
 /*
 */
 if (fxn_debug && !sg_id) {
@@ -2616,14 +2625,17 @@ debug_msg_cont(fxn_debug>=DEBUG_II, fxn_debug, " (altA_rrf_idx=%d", rfi->read_to
 debug_msg_cont(fxn_debug>=DEBUG_II, fxn_debug, " -> alt_Brf_idx=%d)\n", 
 	rfi->read_to_ref[!sg_id][rfi->strand_B ? se->read->len - rd_index - j - 1 : rd_index + j] >= 0 ? rfi->map_A_to_B[rfi->read_to_ref[!sg_id][rfi->strand_B ? se->read->len - rd_index - j - 1 : rd_index + j]] : -1);
 }
+			/* score this aligned read position unless it is covering an indel difference between subgenomes */
 			/* compute likelihood of read nucleotides aligned
 			 * before/after the target or to terminal indels in the
 			 * subgenome alignment (ALIGN_OUTSIDE)
 			 */
-			if ((!sg_id && (arf_index < rfi->start_A || arf_index >= rfi->end_A
-					|| rfi->map_A_to_B[arf_index - rfi->start_A] >= 0))
-				|| (sg_id && (arf_index < rfi->start_B || arf_index >= rfi->end_B
-					|| rfi->map_B_to_A[arf_index - rfi->start_B] >= 0))) {
+//			if ((!sg_id && (arf_index < rfi->start_A || arf_index >= rfi->end_A
+//					|| rfi->map_A_to_B[arf_index - rfi->start_A] >= 0))
+//				|| (sg_id && (arf_index < rfi->start_B || arf_index >= rfi->end_B
+//					|| rfi->map_B_to_A[arf_index - rfi->start_B] >= 0))) {
+			/* score only read positions aligned outside aligned target region or in homoeologous alignments inside aligned target region */
+			if ((!sg_id && (ref0 == ALIGN_OUTSIDE || ref0 == aref0)) || (sg_id && (ref1 == ALIGN_OUTSIDE || ref1 == aref1))) {
 
 				/* had an alternative alignment going */
 				if (try_alternative_alignment && mapped_rf_idx >= 0) {

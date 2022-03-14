@@ -24,6 +24,11 @@ enum {
 };
 
 extern char const *alignment_state_to_string[ALIGN_STATES];
+extern int const alignment_state_to_alignment_state[ALIGN_STATES];
+extern int const cigar_to_alignment_state[CIGAR_NCHAR];
+extern unsigned int const alignment_state_to_cigar[ALIGN_STATES];
+extern unsigned char consumes_reference[CIGAR_NCHAR];
+extern unsigned char consumes_read[CIGAR_NCHAR];
 
 typedef struct _ref_info ref_info;
 //typedef struct _ref_entry ref_entry;

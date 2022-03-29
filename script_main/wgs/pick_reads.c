@@ -22,31 +22,65 @@
 int soft_clip_alignment(sam_entry *se, unsigned int fiveprime_sc, unsigned int threeprime_sc, int rc);
 int match_indel(merge_hash *me, sam **sds, ref_info *rfi, unsigned int start_rd_idx, unsigned int end_rd_idx, unsigned int winning_sg);
 
+/**
+ * Indicate whether CIGAR ash consumes reference.
+ */
 unsigned char consumes_reference[CIGAR_NCHAR] = {1, 0, 1, 1, 0, 0, 0, 1, 1};
+
+/**
+ * Indicate whether CIGAR ash consumes read/query.
+ */
 unsigned char consumes_read[CIGAR_NCHAR] = {1, 1, 0, 0, 1, 0, 0, 1, 1};
+
+/**
+ * Map alignment state (negative numbers used in this file) to CIGAR character.
+ */
 char const *alignment_state_to_string[ALIGN_STATES] = {"M", "D", "I", "S", "O"};
-int const alignment_state_to_alignment_state[ALIGN_STATES] = {ALIGN_MATCH, ALIGN_INSERTION, ALIGN_DELETION, ALIGN_OUTSIDE, ALIGN_OUTSIDE};
-int const cigar_to_alignment_state[CIGAR_NCHAR] = {
-	ALIGN_MATCH, // CIGAR_MMATCH
-	ALIGN_INSERTION, //CIGAR_INSERTION
-	ALIGN_DELETION, //CIGAR_DELETION
-	ALIGN_OUTSIDE, //CIGAR_SKIP
-	ALIGN_SOFT_CLIP, //CIGAR_SOFT_CLIP
-	ALIGN_OUTSIDE, //CIGAR_HARD_CLIP
-	ALIGN_OUTSIDE, //CIGAR_PAD
-	ALIGN_MATCH, //CIGAR_MATCH
-	ALIGN_MATCH //CIGAR_MISMATCH
-};
+
+/**
+ * Map alignment stage (negative enums used in this file) to CIGAR ash enums.
+ */
 unsigned int const alignment_state_to_cigar[ALIGN_STATES] = {
-	CIGAR_MMATCH,	// ALIGN_MATCH
-	CIGAR_DELETION,	// ALIGN_DELETION
-	CIGAR_INSERTION,// ALIGN_INSERTION
-	CIGAR_SOFT_CLIP,// ALIGN_SOFT_CLIP
-	CIGAR_HARD_CLIP	// ALIGN_OUTSIDE
+	CIGAR_MMATCH,		// ALIGN_MATCH
+	CIGAR_DELETION,		// ALIGN_DELETION
+	CIGAR_INSERTION,	// ALIGN_INSERTION
+	CIGAR_SOFT_CLIP,	// ALIGN_SOFT_CLIP
+	CIGAR_HARD_CLIP		// ALIGN_OUTSIDE
+};
+
+/**
+ * Map alignment state to alignment state (negative enums used in this file),
+ * changing perspective from reference to query or vice versa.
+ */
+int const alignment_state_to_alignment_state[ALIGN_STATES] = {
+	ALIGN_MATCH,		// ALIGN_MATCH
+	ALIGN_INSERTION,	// ALIGN_DELETION
+	ALIGN_DELETION,		// ALIGN_INSERTION
+	ALIGN_OUTSIDE,		// ALIGN_SOFT_CLIP
+	ALIGN_OUTSIDE		// ALIGN_OUTSIDE
+};
+
+/**
+ * Map cigar ash to alignment state.
+ */
+int const cigar_to_alignment_state[CIGAR_NCHAR] = {
+	ALIGN_MATCH,		// CIGAR_MMATCH
+	ALIGN_INSERTION,	// CIGAR_INSERTION
+	ALIGN_DELETION,		// CIGAR_DELETION
+	ALIGN_OUTSIDE,		// CIGAR_SKIP
+	ALIGN_SOFT_CLIP,	// CIGAR_SOFT_CLIP
+	ALIGN_OUTSIDE,		// CIGAR_HARD_CLIP
+	ALIGN_OUTSIDE,		// CIGAR_PAD
+	ALIGN_MATCH,		// CIGAR_MATCH
+	ALIGN_MATCH		// CIGAR_MISMATCH
 };
 
 
-
+/**
+ * Set up default reference options.
+ *
+ * @param opt	reference options object
+ */
 void default_options_rf(options_rf *opt)
 {
 	opt->sam_file = NULL;
@@ -602,23 +636,14 @@ int match_indels(merge_hash *mh, sam **sds, ref_info *rfi)
 			if (se->cig->ashes[i].type == CIGAR_SKIP) {
 				return(mmessage(ERROR_MSG, INTERNAL_ERROR, "cannot handle cigar skips"));
 			} else if (se->cig->ashes[i].type == CIGAR_SOFT_CLIP) {
+
 				/* these have already been matched across read alignments */
 				rd_idx += se->cig->ashes[i].len;
 				debug_msg(fxn_debug>DEBUG_I, fxn_debug, "Read %s: %dS (rd_idx=%u)\n", se->name, se->cig->ashes[i].len, rd_idx);
 				continue;
 			} else if (se->cig->ashes[i].type == CIGAR_DELETION) {
+
 				debug_msg(fxn_debug>DEBUG_I, fxn_debug, "Read %s: %dD (rd_idx=%u)\n", se->name, se->cig->ashes[i].len, rd_idx);
-/*
-				if (in_discrepancy) {
-					for (unsigned int j = 0; j < se->cig->ashes[i].len; ++j) {
-						mls.pos = rd_idx + j;
-						lla += sub_prob_given_q_with_encoding(IUPAC_A, XY_C,
-							IUPAC_ENCODING, XY_ENCODING,
-							MAX_ILLUMINA_QUALITY_SCORE, 1, (void *) &mls);
-						debug_msg(fxn_debug>DEBUG_I, fxn_debug, "Read %s: lla=%f (rd_idx=%u)\n", se->name, lla, rd_idx);
-					}
-				}
- */
 				continue;
 			} else if (se->cig->ashes[i].type != CIGAR_MMATCH
 				&& se->cig->ashes[i].type != CIGAR_MATCH

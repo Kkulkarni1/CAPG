@@ -1322,8 +1322,8 @@ int main(int argc, const char *argv[])
 
 	debug_level = DEBUG_II;
 	/* finally: march along reference positions and genotype */
-	//for (size_t posA = start_target[0]; posA < end_target[0]; ++posA) {
-	for (size_t posA = 31076736; posA <= 31076736; ++posA) {
+	for (size_t posA = start_target[0]; posA < end_target[0]; ++posA) {
+//	for (size_t posA = 31076736; posA <= 31076736; ++posA) {
 		//ref_entry *re = rf_info;
 		size_t target_a = posA; 			/* 0-based, absolute position and ... */
 		size_t site = target_a - start_target[0];	/* relative position in aligned region of subgenome A */

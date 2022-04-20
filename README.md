@@ -7,12 +7,13 @@ The main genotyper is written in C as a standalone executable.
 # Table of Contents
 1. [Prerequisites](#prerequisites)
 1. [Installation](#installation)
-1. [Command-Line Options](#options)
 1. [Required Inputs](#input)
 1. [Output](#output)
+1. [Other Command-Line Options](#options)
 1. [Tutorial](#tutorial)
 1. [How to Cite](#cite)
 1. [Contact](#contact)
+1. [Amplicon Version](#amplicon)
 
 # Prerequisites <a name = "prerequisites" />
 
@@ -47,10 +48,6 @@ You will need the Rmath library and the SAMtools executable installed on your sy
    sudo cp capg_wgs /usr/local/bin
    ```
    
-# Command-Line Options <a name = "options" />
-
-Please run `./capg_wgs -h` for detailed information about all available options.
-
 # Required Inputs <a name="input" />
 
 The software requires multiple input files.
@@ -81,6 +78,11 @@ Users can give prefix of the extracted regions using `-j` option.
 # Output <a name="output" />
 
 The genotyping output for each subgenome are stored in [VCF files](https://samtools.github.io/hts-specs/VCFv4.2.pdf).
+
+
+# Command-Line Options <a name = "options" />
+
+Please run `./capg_wgs -h` for detailed information about all available options.
 
 
 # Tutorial <a name = "tutorial" />

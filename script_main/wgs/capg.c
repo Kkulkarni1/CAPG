@@ -2518,7 +2518,7 @@ double ll_align(ref_info *rfi, unsigned int sg_id, sam_entry *se,
 	int mapped_rf_idx = -1;			/* reference index of candidate alternative mapping */
 	unsigned int mapped_rf_len = 0;		/* length of candidate alternative mapping */
 	unsigned char show = *in_show;
-	unsigned char try_alternative_alignment = 1;
+	unsigned char try_alternative_alignment = 0;
 
 	/* control display during debugging */
 	int display_dot = 1;						/* display dot for match */

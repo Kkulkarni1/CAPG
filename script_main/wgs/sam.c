@@ -124,6 +124,7 @@ int read_cigar(FILE *fp, cigar **cig_in)
  * @param s_in	sam object to allocate and fill
  * @return	error status
  */
+#ifdef USE_GZIP
 int read_bam(gzFile fp, sam **s_in)
 {
 //	int fxn_debug = ABSOLUTE_SILENCE;//DEBUG_I;//
@@ -217,6 +218,7 @@ exit(0);
 	/* WORKING: this is way too slow; perhaps we need htslib? */
 
 } /* read_bam */
+#endif
 
 /**
  * Read and parse a sam file.

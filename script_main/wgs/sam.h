@@ -106,7 +106,9 @@ struct _merge_hash {
 
 /* input */
 int read_sam(FILE *fp, sam **s_in, unsigned char, unsigned char);
+#ifdef USE_GZIP
 int read_bam(gzFile gzfp, sam **s_in);
+#endif
 
 /* processing */
 int hash_sam(sam *s, sam_hash **sh_in, int hash_on, size_t n_ref, unsigned char drop_unmapped, unsigned char drop_second, unsigned int drop_soft_clipped, unsigned int drop_indel, unsigned int min_length, unsigned int max_length, double max_exp_err);

@@ -1,8 +1,8 @@
 # CAPG - Comprehensive Allopolyploid Genotyper
 
-This software is implemented for genotyping alleotetraploids' targeted genome regions using screened reads aligned to the whole genome references.
-It has primarily been designed as a standalone executable.
-Skip to [Installation](#installation) to see how.
+This software genotypes targeted genomic regions in alleotetraploids using whole genome sequencing (WGS) reads aligned to both reference subgenomes.
+(For a version that handles targeted amplicons, see [capg_amp](#amplicon).)
+The main genotyper is written in C as a standalone executable.
 
 # Table of Contents
 1. [Prerequisites](#prerequisites)
@@ -15,12 +15,13 @@ Skip to [Installation](#installation) to see how.
 1. [Contact](#contact)
 
 # Prerequisites <a name = "prerequisites" />
+
 - Rmath, the [R Standalone Math Library](https://cran.r-project.org/doc/manuals/r-release/R-admin.html#The-standalone-Rmath-library).  Often, the Rmath library (libRmath.a or libRmath.so for Linux or libRmath.dylib for MacOS) will be installed with R, but not always.  Here are some other locations for the library.
 	- r-mathlib on [Ubuntu](https://ubuntu.com/) and [Debian](https://www.debian.org/)
 	- libRmath on [Fedora](https://ubuntu.com/), [CentOS](https://centos.org/), [Mageia](https://www.mageia.org/en/), and [Mandriva](https://www.openmandriva.org/)
 	- Or if all else fails, you can install the Rmath standalone library from the repository [https://github.com/statslabs/rmath](https://github.com/statslabs/rmath)
 
-- [Samtools](http://www.htslib.org/download/) should be installed into the sysmtem path /usr/local/bin.
+- [Samtools](http://www.htslib.org/download/) should be installed into the system path ```/usr/local/bin```.
 
 # Installation <a name = "installation" />
 
@@ -178,7 +179,7 @@ If you have any problems with this software, please contact:
 
 Roshan Kulkarni (roshank@iastate.edu)
 
-# Supplementary Materials
+# Amplicon Version <a name = "amplicon" />
 
 We also have a similar software for genotyping amplicon sequences, here we briefly mention how to use it.
 

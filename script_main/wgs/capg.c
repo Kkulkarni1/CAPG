@@ -714,6 +714,9 @@ int main(int argc, const char *argv[])
 	for (unsigned int j = 0; j < N_FILES; ++j) {
 		size_t i = 0;
 
+		if (!opt.ref_names[j])
+			exit(mmessage(ERROR_MSG, INVALID_CMDLINE, "You must specify targets via command option --ref_names."));
+
 		while (i < strlen(opt.ref_names[j]) && opt.ref_names[j][i++] != opt_rf.delim_ref);
 		csome_names[j] = malloc(i-- * sizeof(*csome_names[j]));
 		strncpy(csome_names[j], opt.ref_names[j], i);

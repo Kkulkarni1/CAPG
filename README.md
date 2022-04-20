@@ -8,7 +8,7 @@ The main genotyper is written in C as a standalone executable.
 1. [Prerequisites](#prerequisites)
 1. [Installation](#installation)
 1. [Command-Line Options](#options)
-1. [Input Files](#input)
+1. [Required Inputs](#input)
 1. [Output](#output)
 1. [Tutorial](#tutorial)
 1. [How to Cite](#cite)
@@ -23,7 +23,7 @@ You will need the Rmath library and the SAMtools executable installed on your sy
 	- libRmath on [Fedora](https://ubuntu.com/), [CentOS](https://centos.org/), [Mageia](https://www.mageia.org/en/), and [Mandriva](https://www.openmandriva.org/)
 	- Or if all else fails, you can install the Rmath standalone library from the repository [https://github.com/statslabs/rmath](https://github.com/statslabs/rmath)
 
-- [Samtools](http://www.htslib.org/download/) should be installed into the system path ```/usr/local/bin```.
+- [Samtools](http://www.htslib.org/download/) should be installed into the system path, for example ```/usr/local/bin```.
 
 # Installation <a name = "installation" />
 
@@ -33,11 +33,12 @@ You will need the Rmath library and the SAMtools executable installed on your sy
     git clone https://github.com/Kkulkarni1/CAPG.git
     ```
 
-2. Compile CAPG. The executable is called ```capg_wgs```.  It will appear in the ```CAPG/script_main/wgs``` directory you are currently in.
+2. Compile CAPG. The executable is called ```capg_wgs```.  It will appear in the ```CAPG/script_main/wgs``` directory.
 
    ```sh
    cd CAPG/script_main/wgs
-   make capg_wgs
+   cmake .
+   make
    ```
 
 3. Install CAPG. Copy the executable to wherever you need it. If you have root privileges, you can install it into the system path, for example:
@@ -48,115 +49,39 @@ You will need the Rmath library and the SAMtools executable installed on your sy
    
 # Command-Line Options <a name = "options" />
 
-Please run `./capg_wgs -h` for detailed information about all available options.  That help is repeated below.
-```
-CAPG_WGS(1)
+Please run `./capg_wgs -h` for detailed information about all available options.
 
-NAME
-	capg_wgs - genotype tetraploids
-
-SYNOPSIS
-	capg_wgs --sam_files <fsam1> <fsam2> --fsa_files <fsa1> <fsa2> --ref_names <sref1> <sref2> --g <refsam> --j <reffsa>
-		[--vcf_files --min-subgenomic-coverage <dbl>]
-		[--min <int> --max <int> --expected-errors <dbl> --indel <int> --loglike <dbl> --secondary --soft-clipped <int> --coverage <dbl>]
-		[ --o <fout> --error_file|--error_data <ferr>] ...]
-
-DESCRIPTION
-	capg_wgs genotypes tetraploids' targeted genome regions using screened reads in <fsam1> and <fsam2> aligned to the whole genome references from fasta files <fsa1> <fsa2>
-
-NOTICE
-	capg_wgs requires the reference names (appeared in <refsam>) to contain start (0 based) and end position (1 based) of the targeted genome regions relative to the whole genome. Using ':' to seperate original genome name (appeared in <fsam1> and <fsam2>) and region index, '-' to seperate start and end position (e.g. chr1:0-11, which starts at 1st position in 'chr1' and end at 11th position, length is 11 bases)
-
-OPTIONS
-	+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-	Input: all required
-	+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-	--fsa_files <fsa1> <fsa2>
-		Specify fasta files containing subgenomic reference sequences [use samtools faidx to index the files] (Default: none).
-	--sam_files <fsam1> <fsam2>
-		Specify sam files containing alignments (Default: none)
-	--ref_names <sref1> <sref2>
-		Specify names of subgenomic references for target region; must exist in sam  files (Default: none)
-	--geno <refsam>
-		Specify name of sam file of aligning <sref2> to <sref1> (Default: none)
-	--j <reffsa>
-		Specify prefix of targeted fsa files to be extracted  by samtools [Set samtools in system PATH] (Default: extracted)
-	+++++++++++++++++
-	Output:  all optional except for --vcf_files
-	+++++++++++++++++
-	--display_alignment
-		Display alignments in stderr output (Default: no).
-	--vcf_files FILE1 FILE2
-		Genotyping output in one vcf file per subgenome (Default: none).
-	--gl
-		Toggle GL output to vcf files (Default: no).
-	--name STRING
-		Name of accession/individual/genotype; used in vcf header (Default: none).
-	--o <fout>
-		Specify file with the final output (Default: none).
-	++++++++++++++++++++++++++++++
-	Error recalibration:  optional
-	++++++++++++++++++++++++++++++
-	--error_file <ferr>
-		Specify file with estimates of error rates (Default: none).
-	--error_data <ferr>
-		Specify file to output observed errors (Default: none).
-	+++++++++++++++++++++++++++++++++++++++++++
-	Screening reads, coverage checks:  optional
-	+++++++++++++++++++++++++++++++++++++++++++
-	--po <pint>
-		Equal coverage test. (Default: no)
-	--expected_errors <dbl>
-		Discard reads with more than <dbl> expected errors (Default: inf).
-	--indel <i>
-		Drop reads with alignments containing more than <i> indels (Default: 2147483647)
-	--loglik <l>
-		Drop reads with log likelihood less than <l> (Default: -inf)
-	--biallelic FLOAT
-		Skip site if third allele >100*FLOAT% of minimum subgenomic coverage (Default: 0.5).
-	--min <dbl>
-		Drop reads shorter than <dbl> (Default: 0)
-	--max <dbl>
-		Drop reads longer than <dbl> (Default: 2147483647)
-	--secondary
-		Drop secondary alignments (Default: yes)
-	--coverage <c>
-		Tuning parameter for penalty (Default: 1.0).
-	--eq
-		Post-hoc test of equal coverage of homologous chromosomes. (Default: yes)
-	--soft-clipped <s>
-		Drop reads where either alignment is clipped by <s> or more nucleotides (Default: 2147483647)
-	--unmapped
-		Drop reads unmapped in either alignment (Default: yes)
-	+++++++++++++++++++++++++++++++
-	Estimation/Inference:  optional
-	+++++++++++++++++++++++++++++++
-	--min_subgenomic_coverage <c>
-		Abort if subgenomic coverage drops below <c> (Default: 5.0).
-```
-
-# Input Files <a name="input" />
+# Required Inputs <a name="input" />
 
 The software requires multiple input files.
 
-1. Fasta files containing subgenomic references.
+1. Fasta files containing subgenomic references, one subgenome per file. Pass them in via the ```--fsa_files``` command-line option.
 
-2. SAM files containing the reads alignments to each of the references.
+2. SAM files containing the reads aligned to each subgenomic reference separately.  Pass them in via the ```--sam_files``` command-line option.
 
-3. SAM file containing the alignments of selected regions for genotyping. Our software has a requirement of the names of the genotyping regions, they needs to contain start and end position relative to the whole genome and the genome name. Using ':' to seperate original genome name and region index, '-' to seperate start and end position. For example, chr1:0-10 means we will genotype from position 1 to 10 (1 based).
+3. SAM file containing the alignments of selected target regions in each subgenome to each other.  Pass it in via the ```--geno``` command-line option.
 
-We recommand using [MUMmer4](https://github.com/mummer4/mummer) to produce the SAM file for selected regions, command is given below.
+It also requires several command-l-ne options.
+
+1. You must name the target regions to genotype, including the chromosome name and the start and end positions relative to the whole chromosome.
+For example, ```chr1:1-10``` means you want to genotype from position 1 to 10 (1 based) in chromosome 1. Use ':' to seperate chromosome name and region index. Use '-' to seperate start and end positions.
+Pass these in by the ```--ref_names``` command-line option.
+
+We have used [MUMmer4](https://github.com/mummer4/mummer) to produce the SAM file for the alignment of the targeted region(s).
+For example, the following command will output a SAM file called ```ref.sam```.
 
 ```
 nucmer --sam-long=ref --mum target_A.fa target_B.fa
 ```
-This will output a SAM file called ref.sam.
 
-4. We also subset the targted regions from both reference whole genomes using Samtools, users can give prefix of the extracted regions using `-j` option.
+2. We also subset the targeted regions from both reference whole genomes using SAMtools.
+Users can give prefix of the extracted regions using `-j` option.
+
 
 # Output <a name="output" />
 
-The genotyping output (required) for each subgenome are stored in [VCF files](https://samtools.github.io/hts-specs/VCFv4.2.pdf).
+The genotyping output for each subgenome are stored in [VCF files](https://samtools.github.io/hts-specs/VCFv4.2.pdf).
+
 
 # Tutorial <a name = "tutorial" />
 

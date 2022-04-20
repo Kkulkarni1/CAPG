@@ -1,10 +1,11 @@
-//
-//  pick_reads.c
-//  pick reads aligned to each targeted region
-//
-//  Created by Yudi Zhang on 3/24/20.
-//  Copyright © 2020 Yudi Zhang. All rights reserved.
-//
+/*
+ * @file pick_reads.c
+ *
+ * Pick reads aligned to each targeted region.
+ *
+ * Created by Yudi Zhang on 3/24/20.
+ * Copyright © 2020 Yudi Zhang. All rights reserved.
+ */
 
 #include <stdlib.h>
 #include <string.h>
@@ -22,10 +23,37 @@
 int soft_clip_alignment(sam_entry *se, unsigned int fiveprime_sc, unsigned int threeprime_sc, int rc);
 int match_indel(merge_hash *me, sam **sds, ref_info *rfi, unsigned int start_rd_idx, unsigned int end_rd_idx, unsigned int winning_sg);
 
+/**
+ * Does given component of CIGAR consume reference?
+ */
 unsigned char consumes_reference[CIGAR_NCHAR] = {1, 0, 1, 1, 0, 0, 0, 1, 1};
+
+/**
+ * Does given component of CIGAR consume read (or query)?
+ */
 unsigned char consumes_read[CIGAR_NCHAR] = {1, 1, 0, 0, 1, 0, 0, 1, 1};
+
+/**
+ * Convert alignment state to CIGAR-like string.
+ */
 char const *alignment_state_to_string[ALIGN_STATES] = {"M", "D", "I", "S", "O"};
-int const alignment_state_to_alignment_state[ALIGN_STATES] = {ALIGN_MATCH, ALIGN_INSERTION, ALIGN_DELETION, ALIGN_OUTSIDE, ALIGN_OUTSIDE};
+
+/**
+ * Map aligment states from perspective of one sequence to alignment state
+ * from perspective of other sequence. In other words, an insertion
+ * becomes a deletion and a deletion becomes an insertion.
+ */
+int const alignment_state_to_alignment_state[ALIGN_STATES] = {
+	ALIGN_MATCH,	// ALIGN_MATCH
+	ALIGN_INSERTION,// ALIGN_DELETION
+	ALIGN_DELETION,	// ALIGN_INSERTION
+	ALIGN_OUTSIDE,	// ALIGN_SOFT_CLIP
+	ALIGN_SOFT_CLIP	// ALIGN_OUTSIDE
+};
+
+/**
+ * Map CIGAR states to alignment states. See also alignment_state_to_cigar.
+ */
 int const cigar_to_alignment_state[CIGAR_NCHAR] = {
 	ALIGN_MATCH, // CIGAR_MMATCH
 	ALIGN_INSERTION, //CIGAR_INSERTION
@@ -37,6 +65,10 @@ int const cigar_to_alignment_state[CIGAR_NCHAR] = {
 	ALIGN_MATCH, //CIGAR_MATCH
 	ALIGN_MATCH //CIGAR_MISMATCH
 };
+
+/**
+ * Map alignment states to CIGAR states. See also cigar_to_alignment_state.
+ */
 unsigned int const alignment_state_to_cigar[ALIGN_STATES] = {
 	CIGAR_MMATCH,	// ALIGN_MATCH
 	CIGAR_DELETION,	// ALIGN_DELETION
@@ -46,7 +78,11 @@ unsigned int const alignment_state_to_cigar[ALIGN_STATES] = {
 };
 
 
-
+/**
+ * Initialize a reference options object with default options.
+ *
+ * @param opt	reference options
+ */
 void default_options_rf(options_rf *opt)
 {
 	opt->sam_file = NULL;
@@ -62,6 +98,72 @@ void default_options_rf(options_rf *opt)
 	opt->fastq_file = NULL;
 	
 } /* default_options_rf */
+
+
+/**
+ * Read command line options have to do with reference information.
+ *
+ * @param opt	options object for reference information
+ * @param argc	number of arguments on command-line
+ * @param argv	the arguments on the command-line
+ * @return	error status
+ */
+int parse_rf_options(options_rf *opt, int argc, char *argv[])
+{
+	int argv_idx = 1;
+	
+	while (argv_idx < argc) {
+		int j = 0;
+		int len = strlen(argv[argv_idx]);
+		while (j < len && argv[argv_idx][j] == '-')
+			++j;
+		char c = argv[argv_idx][j];
+		switch (c) {
+			case 'u':
+				opt->filter_unmapped = 0;
+				break;
+			case 'l':
+				opt->delim_len = argv[++argv_idx][0];
+				break;
+			case 'r':
+				opt->delim_ref = argv[++argv_idx][0];
+				break;
+			case 'f':
+				opt->sam_file = argv[++argv_idx];
+				break;
+			case 'b':
+				for (j = 0; j < N_FILES; ++j) {
+					opt->rsam_files[j] = argv[++argv_idx];
+					fprintf(stderr, " %s", opt->rsam_files[j]);
+				}
+				fprintf(stderr, "\n");
+				break;
+			case 'd':
+				for (j = 0; j < N_FILES; ++j) {
+					opt->fsa_files[j] = argv[++argv_idx];
+					fprintf(stderr, " %s", opt->fsa_files[j]);
+				}
+				fprintf(stderr, "\n");
+				break;
+			case 's':
+				opt->samtools_command = argv[++argv_idx];
+				mmessage(INFO_MSG, NO_ERROR, "Samtools "
+					 "command: '%s'\n",
+					 opt->samtools_command);
+				break;
+			case 'h':
+			default:
+				if (c != 'h')
+					mmessage(ERROR_MSG, INVALID_CMD_OPTION,
+						 argv[argv_idx]);
+				usage_error((const char **)argv, argv_idx, opt);
+				return 1;
+		}
+		++argv_idx;
+	}
+	return 0;
+} /* parse_rf_options */
+
 
 /**
  * Read sam file containing alignment(s) of homoeologous region(s) of 
@@ -285,25 +387,25 @@ int pickreads(ref_info *rfi, sam **sds, char const **csome_names)
 					se->exclude = 1;
 				}
 			}
-					/* there could be many such reads! */
-					/*mmessage(INFO_MSG, NO_ERROR, "Read %s (%u) "
-						"excluded because it does not align to "
-						"target.\n", se->name, m);*/
-				/*
-					size_t length = strlen(rname) + 3
-						+ (int)(log10(end_pos[j]) + 1) + (int)(log10(start_pos[j]) + 1);
+			/* there could be many such reads! */
+			/*mmessage(INFO_MSG, NO_ERROR, "Read %s (%u) "
+				"excluded because it does not align to "
+				"target.\n", se->name, m);*/
+			/*
+			size_t length = strlen(rname) + 3
+				+ (int)(log10(end_pos[j]) + 1) + (int)(log10(start_pos[j]) + 1);
 
-					se->ref_name = malloc(length);
-					if (!se->ref_name)
-						return mmessage(ERROR_MSG, 
-							MEMORY_ALLOCATION, "ref_name");
-					sprintf(se->ref_name, "%s%s%zu%s%zu",
-						rname, opt->delim_ref,
-						start_pos[j], opt->delim_len,
-						end_pos[j]);
-					se->which_ref = rfi->ref_idx;
-//					debug_msg(fxn_debug >= DEBUG_I, fxn_debug, "REF_ID: %d REF_NAME: %s \n", se->which_ref, se->ref_name);
-				*/
+			se->ref_name = malloc(length);
+			if (!se->ref_name)
+				return mmessage(ERROR_MSG, 
+					MEMORY_ALLOCATION, "ref_name");
+			sprintf(se->ref_name, "%s%s%zu%s%zu",
+				rname, opt->delim_ref,
+				start_pos[j], opt->delim_len,
+				end_pos[j]);
+			se->which_ref = rfi->ref_idx;
+//			debug_msg(fxn_debug >= DEBUG_I, fxn_debug, "REF_ID: %d REF_NAME: %s \n", se->which_ref, se->ref_name);
+			*/
 		}
 	}
 
@@ -312,6 +414,7 @@ int pickreads(ref_info *rfi, sam **sds, char const **csome_names)
 
 	return NO_ERROR;
 }/* pickreads */
+
 
 /**
  * Extract selected regions from fasta file. Samtools uses region specification
@@ -330,7 +433,7 @@ int extract_ref(char const *samtools_command, char const *ref_name, size_t ref_s
 {
 	FILE *fp;
 
-	// index the whole reference genome file
+	/* check the required FASTA file with references exists */
 	if (!ref_file || !(fp = fopen(ref_file, "r")))
 		return(mmessage(ERROR_MSG, FILE_NOT_FOUND, ref_file));
 	fclose(fp);
@@ -361,72 +464,12 @@ int extract_ref(char const *samtools_command, char const *ref_name, size_t ref_s
 	
 }/* extract_ref */
 
-/**
- * Read command line options have to do with reference information.
- *
- * @param opt	options object for reference information
- * @param argc	number of arguments on command-line
- * @param argv	the arguments on the command-line
- * @return	error status
- */
-int parse_rf_options(options_rf *opt, int argc, char *argv[])
-{
-	int argv_idx = 1;
-	
-	while (argv_idx < argc) {
-		int j = 0;
-		int len = strlen(argv[argv_idx]);
-		while (j < len && argv[argv_idx][j] == '-')
-			++j;
-		char c = argv[argv_idx][j];
-		switch (c) {
-			case 'u':
-				opt->filter_unmapped = 0;
-				break;
-			case 'l':
-				opt->delim_len = argv[++argv_idx][0];
-				break;
-			case 'r':
-				opt->delim_ref = argv[++argv_idx][0];
-				break;
-			case 'f':
-				opt->sam_file = argv[++argv_idx];
-				break;
-			case 'b':
-				for (j = 0; j < N_FILES; ++j) {
-					opt->rsam_files[j] = argv[++argv_idx];
-					fprintf(stderr, " %s", opt->rsam_files[j]);
-				}
-				fprintf(stderr, "\n");
-				break;
-			case 'd':
-				for (j = 0; j < N_FILES; ++j) {
-					opt->fsa_files[j] = argv[++argv_idx];
-					fprintf(stderr, " %s", opt->fsa_files[j]);
-				}
-				fprintf(stderr, "\n");
-				break;
-			case 's':
-				opt->samtools_command = argv[++argv_idx];
-				mmessage(INFO_MSG, NO_ERROR, "Samtools "
-					 "command: '%s'\n",
-					 opt->samtools_command);
-				break;
-			case 'h':
-			default:
-				if (c != 'h')
-					mmessage(ERROR_MSG, INVALID_CMD_OPTION,
-						 argv[argv_idx]);
-				usage_error((const char **)argv, argv_idx, opt);
-				return 1;
-		}
-		++argv_idx;
-	}
-	return 0;
-} /* parse_rf_options */
 
 /**
  * Output reads aligned to chosen target, including reads not aligned to both.
+ *
+ * [TODO] Probably want to skip alignments with me->exclude, but I don't think
+ * we currently use this code for any purpose.
  *
  * @param f	output FASTA file
  * @param sds	sam records of reads
@@ -462,11 +505,17 @@ void output_selected_reads(char const *f, sam **sds, merge_hash *mh)
 	fclose(fpp);
 } /* output_selected_reads */
 
+
 /**
  * Compute mapping from 0-based read index to 0-based reference index relative
- * to the target region (not alignment region) by alignment in SAM file. Maps
- * to -1 if maps to reference nucleotide not within aligned target. Resulting
- * map stored in ref_info::read_to_ref[N_FILES].
+ * to the target region (not alignment region) by alignments in both the read
+ * SAM file and the subgenomic alignments SAM file. Maps to:
+ * ALIGN_OUTSIDE	if maps to reference nucleotide outside the aligned
+ *			target region
+ * ALIGN_INSERTION	if the read nucleotide is in an insertino
+ * ALIGN_SOFT_CLIP	if the read nucleotide is soft-clipped
+ *
+ * Resulting map stored in ref_info::read_to_ref[N_FILES].
  *
  * @param rfi	reference information
  * @param sds	read alignments
@@ -480,7 +529,7 @@ int index_read_to_ref(ref_info *rfi, sam *sds[N_FILES], merge_hash *me)
 
 	debug_msg(fxn_debug, fxn_debug, "Entering with read %s.\n", se->name);
 
-	/* (re)allocate space for mapping */
+	/* (re)allocate space for mapping, otherwise use previously allocated space */
 	if (rfi->read_len != se->read->len) {
 		for (unsigned int j = 0; j < N_FILES; ++j) {
 			if (rfi->read_to_ref[j])
@@ -582,8 +631,22 @@ int match_indels(merge_hash *mh, sam **sds, ref_info *rfi)
 		if (me->exclude)
 			continue;
 
+		/* fill in rfi->read_to_ref for both alignments mapping from
+		 * read index to relative reference index in [startA, endA) or
+		 * [startB, endB).
+		 */
 		index_read_to_ref(rfi, sds, me);
 
+		/* require indels to be bound on both signs by homoeologous
+		 * alignments where the same read nucleotide is aligned to
+		 * reference positions that are aligned in the subgenome
+		 * alignment:
+		 *     H      H : homoeologously aligned sites
+		 *     RRRR---R
+		 *     AAAA---R
+		 *     BBBBBBBB                          BBBBBBBB
+		 *     R---RRRR : "correct" alignment is RRRR---R
+		 */
 		n_homoeologous_sites = 0;
 
 		sam_entry *se = &sds[0]->se[me->indices[0][0]];	/* sgA is default alignment */

@@ -76,8 +76,6 @@ OPTIONS
 		Specify names of subgenomic references for target region; must exist in sam  files (Default: none)
 	--geno <refsam>
 		Specify name of sam file of aligning <sref2> to <sref1> (Default: none)
-	--j <reffsa>
-		Specify prefix of targeted fsa files to be extracted  by samtools [Set samtools in system PATH] (Default: extracted)
 	+++++++++++++++++
 	Output:  all optional except for --vcf_files
 	+++++++++++++++++
@@ -101,7 +99,7 @@ OPTIONS
 	+++++++++++++++++++++++++++++++++++++++++++
 	Screening reads, coverage checks:  optional
 	+++++++++++++++++++++++++++++++++++++++++++
-	--po <pint>
+	--eq <pint>
 		Equal coverage test. (Default: no)
 	--expected_errors <dbl>
 		Discard reads with more than <dbl> expected errors (Default: inf).
@@ -114,13 +112,13 @@ OPTIONS
 	--min <dbl>
 		Drop reads shorter than <dbl> (Default: 0)
 	--max <dbl>
-		Drop reads longer than <dbl> (Default: 2147483647)
+		Drop reads longer than <dbl> (Default: 0)
+	--supplementary
+		Drop supplementary alignments (Default: yes)	
 	--secondary
 		Drop secondary alignments (Default: yes)
 	--coverage <c>
 		Tuning parameter for penalty (Default: 1.0).
-	--eq
-		Post-hoc test of equal coverage of homologous chromosomes. (Default: yes)
 	--soft-clipped <s>
 		Drop reads where either alignment is clipped by <s> or more nucleotides (Default: 2147483647)
 	--unmapped
@@ -149,8 +147,6 @@ nucmer --sam-long=ref --mum target_A.fa target_B.fa
 ```
 This will output a SAM file called ref.sam.
 
-4. We also subset the targted regions from both reference whole genomes using Samtools, users can give prefix of the extracted regions using `-j` option.
-
 # Output <a name="output" />
 
 The genotyping output (required) for each subgenome are stored in [VCF files](https://samtools.github.io/hts-specs/VCFv4.2.pdf).
@@ -158,12 +154,12 @@ The genotyping output (required) for each subgenome are stored in [VCF files](ht
 # Tutorial <a name = "tutorial" />
 
 All the files used and created in this tutorial are in the `data` folder. 
-The selected regions we want to genotye are passed to `--ref_names`, in this example we will genotype positions 1 to 5000, the whole genome references are given to `--fsa_files` and the reads alignments to whole genome references are passed to `--sam_files`, the alignment of selected regions are passed to `--geno` and the prefix of selected regions can be given by `-j` (this will output prefix0.fsa and prefix1.fsa), and finally `--vcf_files` option output the genotypes.
+The selected regions we want to genotye are passed to `--ref_names`, in this example we will genotype positions 1 to 5000, the whole genome references are given to `--fsa_files` and the reads alignments to whole genome references are passed to `--sam_files`, the alignment of selected regions are passed to `--geno`, and finally `--vcf_files` option output the genotypes.
 
 Only one command line is required for genotyping:
 
 ```
-./capg_wgs --ref_names Genome_A:0-5000 Genome_B:0-5000 --sam_files ../../data/aln0A.sam ../../data/aln0B.sam --fsa_files ../../data/refA.fa ../../data/refB.fa --geno ../../data/ref.sam -j ../../data/extracted --vcf_files ../../data/A.vcf ../../data/B.vcf
+./capg_wgs --ref_names Genome_A:0-5000 Genome_B:0-5000 --sam_files ../../data/aln0A.sam ../../data/aln0B.sam --fsa_files ../../data/refA.fa ../../data/refB.fa --geno ../../data/ref.sam --vcf_files ../../data/A.vcf ../../data/B.vcf
 ```
 
 The positions with coverage 0 will not be outputed

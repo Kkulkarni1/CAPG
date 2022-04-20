@@ -9,6 +9,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
 
 #include "fastq.h"
 #include "nuc.h"
@@ -24,17 +25,17 @@ int soft_clip_alignment(sam_entry *se, unsigned int fiveprime_sc, unsigned int t
 int match_indel(merge_hash *me, sam **sds, ref_info *rfi, unsigned int start_rd_idx, unsigned int end_rd_idx, unsigned int winning_sg);
 
 /**
- * Does given component of CIGAR consume reference?
+ * Indicate whether CIGAR ash consumes reference.
  */
 unsigned char consumes_reference[CIGAR_NCHAR] = {1, 0, 1, 1, 0, 0, 0, 1, 1};
 
 /**
- * Does given component of CIGAR consume read (or query)?
+ * Indicate whether CIGAR ash consumes read/query.
  */
 unsigned char consumes_read[CIGAR_NCHAR] = {1, 1, 0, 0, 1, 0, 0, 1, 1};
 
 /**
- * Convert alignment state to CIGAR-like string.
+ * Map alignment state (negative numbers used in this file) to CIGAR character.
  */
 char const *alignment_state_to_string[ALIGN_STATES] = {"M", "D", "I", "S", "O"};
 
@@ -70,18 +71,45 @@ int const cigar_to_alignment_state[CIGAR_NCHAR] = {
  * Map alignment states to CIGAR states. See also cigar_to_alignment_state.
  */
 unsigned int const alignment_state_to_cigar[ALIGN_STATES] = {
-	CIGAR_MMATCH,	// ALIGN_MATCH
-	CIGAR_DELETION,	// ALIGN_DELETION
-	CIGAR_INSERTION,// ALIGN_INSERTION
-	CIGAR_SOFT_CLIP,// ALIGN_SOFT_CLIP
-	CIGAR_HARD_CLIP	// ALIGN_OUTSIDE
+	CIGAR_MMATCH,		// ALIGN_MATCH
+	CIGAR_DELETION,		// ALIGN_DELETION
+	CIGAR_INSERTION,	// ALIGN_INSERTION
+	CIGAR_SOFT_CLIP,	// ALIGN_SOFT_CLIP
+	CIGAR_HARD_CLIP		// ALIGN_OUTSIDE
+};
+
+/**
+ * Map alignment state to alignment state (negative enums used in this file),
+ * changing perspective from reference to query or vice versa.
+ */
+int const alignment_state_to_alignment_state[ALIGN_STATES] = {
+	ALIGN_MATCH,		// ALIGN_MATCH
+	ALIGN_INSERTION,	// ALIGN_DELETION
+	ALIGN_DELETION,		// ALIGN_INSERTION
+	ALIGN_OUTSIDE,		// ALIGN_SOFT_CLIP
+	ALIGN_OUTSIDE		// ALIGN_OUTSIDE
+};
+
+/**
+ * Map cigar ash to alignment state.
+ */
+int const cigar_to_alignment_state[CIGAR_NCHAR] = {
+	ALIGN_MATCH,		// CIGAR_MMATCH
+	ALIGN_INSERTION,	// CIGAR_INSERTION
+	ALIGN_DELETION,		// CIGAR_DELETION
+	ALIGN_OUTSIDE,		// CIGAR_SKIP
+	ALIGN_SOFT_CLIP,	// CIGAR_SOFT_CLIP
+	ALIGN_OUTSIDE,		// CIGAR_HARD_CLIP
+	ALIGN_OUTSIDE,		// CIGAR_PAD
+	ALIGN_MATCH,		// CIGAR_MATCH
+	ALIGN_MATCH		// CIGAR_MISMATCH
 };
 
 
 /**
- * Initialize a reference options object with default options.
+ * Set up default reference options.
  *
- * @param opt	reference options
+ * @param opt	reference options object
  */
 void default_options_rf(options_rf *opt)
 {
@@ -599,6 +627,15 @@ int index_read_to_ref(ref_info *rfi, sam *sds[N_FILES], merge_hash *me)
 		}
 		debug_msg_cont(fxn_debug, fxn_debug, "\n");
 	}
+    
+    // reverse read index when B is reverse complemented
+    if (rfi->strand_B) {
+        for(unsigned int i = 0; i < se->read->len/2; ++i) {
+            unsigned int tmp = rfi->read_to_ref[1][se->read->len - i - 1];
+            rfi->read_to_ref[1][se->read->len - i - 1] = rfi->read_to_ref[1][i];
+            rfi->read_to_ref[1][i] = tmp;
+        }
+    }
 
 	return NO_ERROR;
 } /* index_read_to_ref */
@@ -665,23 +702,14 @@ int match_indels(merge_hash *mh, sam **sds, ref_info *rfi)
 			if (se->cig->ashes[i].type == CIGAR_SKIP) {
 				return(mmessage(ERROR_MSG, INTERNAL_ERROR, "cannot handle cigar skips"));
 			} else if (se->cig->ashes[i].type == CIGAR_SOFT_CLIP) {
+
 				/* these have already been matched across read alignments */
 				rd_idx += se->cig->ashes[i].len;
 				debug_msg(fxn_debug>DEBUG_I, fxn_debug, "Read %s: %dS (rd_idx=%u)\n", se->name, se->cig->ashes[i].len, rd_idx);
 				continue;
 			} else if (se->cig->ashes[i].type == CIGAR_DELETION) {
+
 				debug_msg(fxn_debug>DEBUG_I, fxn_debug, "Read %s: %dD (rd_idx=%u)\n", se->name, se->cig->ashes[i].len, rd_idx);
-/*
-				if (in_discrepancy) {
-					for (unsigned int j = 0; j < se->cig->ashes[i].len; ++j) {
-						mls.pos = rd_idx + j;
-						lla += sub_prob_given_q_with_encoding(IUPAC_A, XY_C,
-							IUPAC_ENCODING, XY_ENCODING,
-							MAX_ILLUMINA_QUALITY_SCORE, 1, (void *) &mls);
-						debug_msg(fxn_debug>DEBUG_I, fxn_debug, "Read %s: lla=%f (rd_idx=%u)\n", se->name, lla, rd_idx);
-					}
-				}
- */
 				continue;
 			} else if (se->cig->ashes[i].type != CIGAR_MMATCH
 				&& se->cig->ashes[i].type != CIGAR_MATCH
@@ -702,7 +730,13 @@ int match_indels(merge_hash *mh, sam **sds, ref_info *rfi)
 					? rfi->map_A_to_B[rf_idx]			/* sgB index implied by A alignment */
 					: rf_idx;
 
-				debug_msg(fxn_debug>DEBUG_I, fxn_debug, "Read %s (rd_idx=%u): rf_idx=%d, other_rf_idx=%d, alt_rf_idx=%d, alt_other_rf_idx=%d\n", se->name, rd_idx + j, rf_idx, other_rf_idx, alt_rf_idx, alt_other_rf_idx);
+                debug_msg(fxn_debug>DEBUG_I, fxn_debug, "Read %s (rd_idx=%u): rf_idx=%d(%d) %d, other_rf_idx=%d(%d) %d, alt_rf_idx=%d %d, alt_other_rf_idx=%d %d\n", se->name, rd_idx + j,
+                          rf_idx, rf_idx + rfi->start_A - rfi->alignment_start[0], rfi->ref[0][(size_t) rf_idx + rfi->start_A - rfi->alignment_start[0]], other_rf_idx, other_rf_idx + rfi->start_B - rfi->alignment_start[1],
+                          rfi->ref[1][(size_t) other_rf_idx + rfi->start_B - rfi->alignment_start[1]],
+                          alt_rf_idx, rfi->ref[0][(size_t) alt_rf_idx + rfi->start_A - rfi->alignment_start[0]],
+                          alt_other_rf_idx, rfi->ref[1][(size_t) alt_other_rf_idx + rfi->start_B - rfi->alignment_start[1]]);
+                debug_msg(fxn_debug>DEBUG_I, fxn_debug, "last_rf_idx=%d, last_other_rf_idx=%d, last_alt_rf_idx=%d, last_alt_other_rf_idx=%d\n",
+                          last_rf_idx, last_other_rf_idx, last_alt_rf_idx, last_alt_other_rf_idx);
 
 				/* exit discrepancy */
 				if (rf_idx >= 0 && rf_idx == alt_rf_idx) {
@@ -724,14 +758,28 @@ int match_indels(merge_hash *mh, sam **sds, ref_info *rfi)
 								MAX_ILLUMINA_QUALITY_SCORE, 1, (void *) &mls);
 							debug_msg(fxn_debug>DEBUG_I, fxn_debug, "Read %s: %uD in sgA via sgB (llb = %f)\n", se->name, (alt_rf_idx - last_alt_rf_idx - 1), llb);
 						}
-						if ((unsigned int) other_rf_idx > last_other_rf_idx + 1) {
+                        if (last_other_rf_idx > (unsigned int) other_rf_idx + 1 && rfi->strand_B) {
+                            llb += (last_other_rf_idx - other_rf_idx - 1) * sub_prob_given_q_with_encoding(
+                                IUPAC_A, XY_C,
+                                IUPAC_ENCODING, XY_ENCODING,
+                                MAX_ILLUMINA_QUALITY_SCORE, 1, (void *) &mls);
+                            debug_msg(fxn_debug>DEBUG_I, fxn_debug, "Read %s: %uD in sgB (llb = %f)\n", se->name, (last_other_rf_idx - other_rf_idx - 1), llb);
+                        }
+						if ((unsigned int) other_rf_idx > last_other_rf_idx + 1 && !rfi->strand_B) {
 							llb += (other_rf_idx - last_other_rf_idx - 1) * sub_prob_given_q_with_encoding(
 								IUPAC_A, XY_C,
 								IUPAC_ENCODING, XY_ENCODING,
 								MAX_ILLUMINA_QUALITY_SCORE, 1, (void *) &mls);
 							debug_msg(fxn_debug>DEBUG_I, fxn_debug, "Read %s: %uD in sgB (llb = %f)\n", se->name, (other_rf_idx - last_other_rf_idx - 1), llb);
 						}
-						if ((unsigned int) alt_other_rf_idx  > last_alt_other_rf_idx+ 1) {
+                        if (last_alt_other_rf_idx > (unsigned int) alt_other_rf_idx + 1 && rfi->strand_B) {
+                            lla += (last_alt_other_rf_idx - alt_other_rf_idx - 1) * sub_prob_given_q_with_encoding(
+                                IUPAC_A, XY_C,
+                                IUPAC_ENCODING, XY_ENCODING,
+                                MAX_ILLUMINA_QUALITY_SCORE, 1, (void *) &mls);
+                            debug_msg(fxn_debug>DEBUG_I, fxn_debug, "Read %s: %uD in sgB via sgA (lla = %f)\n", se->name, (last_alt_other_rf_idx - alt_other_rf_idx - 1), lla);
+                        }
+						if ((unsigned int) alt_other_rf_idx  > last_alt_other_rf_idx + 1 && !rfi->strand_B) {
 							lla += (alt_other_rf_idx - last_alt_other_rf_idx - 1) * sub_prob_given_q_with_encoding(
 								IUPAC_A, XY_C,
 								IUPAC_ENCODING, XY_ENCODING,
@@ -815,7 +863,14 @@ int match_indels(merge_hash *mh, sam **sds, ref_info *rfi)
 					}
 					/* read to sgB via sgA alignment */
 					if (alt_other_rf_idx >= 0) {
-						if ((unsigned int) alt_other_rf_idx > last_alt_other_rf_idx + 1) {
+                        if (last_alt_other_rf_idx > (unsigned int) alt_other_rf_idx + 1 && rfi->strand_B) {
+                            lla += (last_other_rf_idx - alt_other_rf_idx - 1) * sub_prob_given_q_with_encoding(
+                                IUPAC_A, XY_C,
+                                IUPAC_ENCODING, XY_ENCODING,
+                                MAX_ILLUMINA_QUALITY_SCORE, 1, (void *) &mls);
+                            debug_msg(fxn_debug>DEBUG_I, fxn_debug, "Read %s: %uI in sgB via sgA (lla = %f)\n", se->name, (last_other_rf_idx - alt_other_rf_idx - 1), llb);
+                        }
+						if ((unsigned int) alt_other_rf_idx > last_alt_other_rf_idx + 1 && !rfi->strand_B) {
 							lla += (alt_other_rf_idx - last_other_rf_idx - 1) * sub_prob_given_q_with_encoding(
 								IUPAC_A, XY_C,
 								IUPAC_ENCODING, XY_ENCODING,
@@ -823,6 +878,9 @@ int match_indels(merge_hash *mh, sam **sds, ref_info *rfi)
 							debug_msg(fxn_debug>DEBUG_I, fxn_debug, "Read %s: %uD in sgB via sgA (lla = %f)\n", se->name, (alt_other_rf_idx - last_other_rf_idx - 1), lla);
 						}
 						rn = rfi->ref[1][(size_t) alt_other_rf_idx + rfi->start_B - rfi->alignment_start[1]];
+                        if (rfi->strand_B) {
+                            rn = xy_to_iupac[xy_to_rc[iupac_to_xy[rn]]];
+                        }
 						lla += sub_prob_given_q_with_encoding(rn,
 							get_nuc(se->read, XY_ENCODING, rd_idx + j),
 							IUPAC_ENCODING, XY_ENCODING,
@@ -854,7 +912,14 @@ int match_indels(merge_hash *mh, sam **sds, ref_info *rfi)
 					}
 					/* read to sgB via sgB alignment */
 					if (other_rf_idx >= 0) {
-						if ((unsigned int) other_rf_idx > last_other_rf_idx + 1) {
+                        if (last_other_rf_idx > (unsigned int) other_rf_idx + 1 && rfi->strand_B) {
+                            llb += (last_other_rf_idx - other_rf_idx - 1) * sub_prob_given_q_with_encoding(
+                                IUPAC_A, XY_C,
+                                IUPAC_ENCODING, XY_ENCODING,
+                                MAX_ILLUMINA_QUALITY_SCORE, 1, (void *) &mls);
+                            debug_msg(fxn_debug>DEBUG_I, fxn_debug, "Read %s: %uD in sgB (llb = %f)\n", se->name, (last_other_rf_idx - other_rf_idx - 1), llb);
+                        }
+						if ((unsigned int) other_rf_idx > last_other_rf_idx + 1 && !rfi->strand_B) {
 							llb += (other_rf_idx - last_other_rf_idx - 1) * sub_prob_given_q_with_encoding(
 								IUPAC_A, XY_C,
 								IUPAC_ENCODING, XY_ENCODING,
@@ -863,6 +928,9 @@ int match_indels(merge_hash *mh, sam **sds, ref_info *rfi)
 						}
 						/* read to sgB */
 						rn = rfi->ref[1][(size_t) other_rf_idx + rfi->start_B - rfi->alignment_start[1]];
+                        if (rfi->strand_B) {
+                            rn = xy_to_iupac[xy_to_rc[iupac_to_xy[rn]]];
+                        }
 						/* log likelihood of this alternative */
 						llb += sub_prob_given_q_with_encoding(rn,
 							get_nuc(se->read, XY_ENCODING, rd_idx + j),
@@ -926,6 +994,17 @@ int match_indel(merge_hash *me, sam **sds, ref_info *rfi, unsigned int start_rd_
 	debug_msg(fxn_debug, fxn_debug, "Read %s (subgenome %c): ", se->name, winning_sg ? 'B' : 'A');
 	debug_call(fxn_debug, fxn_debug, print_cigar(stderr, &sds[winning_sg]->se[me->indices[winning_sg][0]]));
 	debug_msg_cont(fxn_debug, fxn_debug, "\n");
+    // reverse the cigar if reverse complemented
+    if (rfi->strand_B) {
+        for (unsigned int i = 0; i < se->cig->n_ashes/2; ++i) {
+            unsigned int tmp_type = se->cig->ashes[se->cig->n_ashes-i-1].type;
+            se->cig->ashes[se->cig->n_ashes-i-1].type = se->cig->ashes[i].type;
+            se->cig->ashes[i].type = tmp_type;
+            unsigned int tmp_len = se->cig->ashes[se->cig->n_ashes-i-1].len;
+            se->cig->ashes[se->cig->n_ashes-i-1].len = se->cig->ashes[i].len;
+            se->cig->ashes[i].len = tmp_len;
+        }
+    }
 
 	/* count number of ashes (before and after realignment) in the discrepant region */
 	for (unsigned int j = 0; j < se->cig->n_ashes; ++j) {
@@ -989,7 +1068,12 @@ int match_indel(merge_hash *me, sam **sds, ref_info *rfi, unsigned int start_rd_
 					exit(mmessage(ERROR_MSG, INTERNAL_ERROR, "Impossible.\n"));
 
 				/* there must have been a deletion in new alignment */
-				if ((unsigned int) alt_rf_idx > last_alt_rf_idx + 1) {
+                if (rfi->strand_B && !winning_sg && last_alt_rf_idx > (unsigned int) alt_rf_idx + 1) {
+                    ++n_new_ashes;
+                    prev_ash = ALIGN_DELETION;
+                    debug_msg(fxn_debug>DEBUG_I, fxn_debug, "Read %s: Ending new alignment with %uD (n_new_ashes=%u, n_old_ashes=%u)\n", se->name, (last_alt_rf_idx - alt_rf_idx - 1), n_new_ashes, n_old_ashes);
+                }
+				else if ((unsigned int) alt_rf_idx > last_alt_rf_idx + 1) {
 					++n_new_ashes;
 					prev_ash = ALIGN_DELETION;
 					debug_msg(fxn_debug>DEBUG_I, fxn_debug, "Read %s: Ending new alignment with %uD (n_new_ashes=%u, n_old_ashes=%u)\n", se->name, (alt_rf_idx - last_alt_rf_idx - 1), n_new_ashes, n_old_ashes);
@@ -1004,7 +1088,12 @@ int match_indel(merge_hash *me, sam **sds, ref_info *rfi, unsigned int start_rd_
 			} else if (in_region || (!in_region && rd_idx + k > start_rd_idx)) {
 
 				/* there must have been a deletion induced chosen alignment */
-				if (alt_rf_idx >= 0 && (unsigned int) alt_rf_idx > last_alt_rf_idx + 1) {
+                if (rfi->strand_B && !winning_sg && alt_rf_idx >= 0 && last_alt_rf_idx > (unsigned int) alt_rf_idx + 1) {
+                    ++n_new_ashes;
+                    prev_ash = ALIGN_DELETION;
+                    debug_msg(fxn_debug>DEBUG_I, fxn_debug, "Read %s: adding %uD (n_new_ashes=%u, n_old_ashes=%u)\n", se->name, (last_alt_rf_idx - alt_rf_idx - 1), n_new_ashes, n_old_ashes);
+                }
+				else if (alt_rf_idx >= 0 && (unsigned int) alt_rf_idx > last_alt_rf_idx + 1) {
 					++n_new_ashes;
 					prev_ash = ALIGN_DELETION;
 					debug_msg(fxn_debug>DEBUG_I, fxn_debug, "Read %s: adding %uD (n_new_ashes=%u, n_old_ashes=%u)\n", se->name, alt_rf_idx - last_alt_rf_idx - 1, n_new_ashes, n_old_ashes);
@@ -1152,7 +1241,14 @@ int match_indel(merge_hash *me, sam **sds, ref_info *rfi, unsigned int start_rd_
 			if (in_region && rd_idx + k >= end_rd_idx) {
 
 				/* there must have been a deletion in other subgenome alignment */
-				if (alt_rf_idx >= 0 && (unsigned int) alt_rf_idx > last_alt_rf_idx + 1) {
+                if (rfi->strand_B && !winning_sg && alt_rf_idx >= 0 && last_alt_rf_idx > (unsigned int) alt_rf_idx + 1) {
+                    ashes[n_ash].type = CIGAR_DELETION;
+                    ashes[n_ash++].len = last_alt_rf_idx - alt_rf_idx - 1;
+                    prev_ash = ALIGN_DELETION;
+                    last_alt_rf_idx += ashes[n_ash - 1].len + 1;
+                    debug_msg(fxn_debug>DEBUG_I, fxn_debug, "**Read %s: add %uD (alt_rf_idx=%d, last_alt_rf_idx=%u)\n", se->name, ashes[n_ash-1].len, alt_rf_idx, last_alt_rf_idx);
+                }
+				else if (alt_rf_idx >= 0 && (unsigned int) alt_rf_idx > last_alt_rf_idx + 1) {
 					ashes[n_ash].type = CIGAR_DELETION;
 					ashes[n_ash++].len = alt_rf_idx - last_alt_rf_idx - 1;
 					prev_ash = ALIGN_DELETION;
@@ -1165,12 +1261,16 @@ int match_indel(merge_hash *me, sam **sds, ref_info *rfi, unsigned int start_rd_
 					ashes[n_ash].type = se->cig->ashes[j].type;
 					ashes[n_ash++].len = se->cig->ashes[j].len - k;
 					prev_ash = cigar_to_alignment_state[ashes[n_ash-1].type];
-					if (consumes_reference[ashes[n_ash-1].type])
+                    if (rfi->strand_B && !winning_sg && consumes_reference[ashes[n_ash-1].type])
+                        last_alt_rf_idx -= ashes[n_ash - 1].len - 1;
+					else if (consumes_reference[ashes[n_ash-1].type])
 						last_alt_rf_idx += ashes[n_ash - 1].len + 1;
 					debug_msg(fxn_debug>DEBUG_I, fxn_debug, "**Read %s: add %u%c and leave (alt_rf_idx=%d, last_alt_rf_idx=%u)\n", se->name, ashes[n_ash-1].len, cigar_char[ashes[n_ash-1].type], alt_rf_idx, last_alt_rf_idx);
 				} else {
 					ashes[n_ash - 1].len += se->cig->ashes[j].len - k;
-					if (consumes_reference[ashes[n_ash-1].type])
+                    if (rfi->strand_B && !winning_sg && consumes_reference[ashes[n_ash-1].type])
+                        last_alt_rf_idx -= ashes[n_ash - 1].len - 1;
+					else if (consumes_reference[ashes[n_ash-1].type])
 						last_alt_rf_idx += ashes[n_ash - 1].len + 1;
 					debug_msg(fxn_debug>DEBUG_I, fxn_debug, "**Read %s: continuing %u%c and leave (alt_rf_idx=%d, last_alt_rf_idx=%u)\n", se->name, ashes[n_ash-1].len, cigar_char[ashes[n_ash-1].type], alt_rf_idx, last_alt_rf_idx);
 				}
@@ -1184,7 +1284,13 @@ int match_indel(merge_hash *me, sam **sds, ref_info *rfi, unsigned int start_rd_
 			} else if (in_region || (rd_idx + k > start_rd_idx && rd_idx + k < end_rd_idx)) {
 
 				/* there must have been a deletion in other subgenome alignment */
-				if (alt_rf_idx >= 0 && (unsigned int) alt_rf_idx > last_alt_rf_idx + 1) {
+                if (rfi->strand_B && !winning_sg && alt_rf_idx >= 0 && last_alt_rf_idx > (unsigned int) alt_rf_idx + 1) {
+                    ashes[n_ash].type = CIGAR_DELETION;
+                    ashes[n_ash++].len = last_alt_rf_idx - alt_rf_idx - 1;
+                    prev_ash = ALIGN_DELETION;
+                    debug_msg(fxn_debug>DEBUG_I, fxn_debug, "**Read %s: %sadd %uD\n", se->name, in_region?"":"entering region, ",  last_alt_rf_idx - alt_rf_idx - 1);
+                }
+				else if (alt_rf_idx >= 0 && (unsigned int) alt_rf_idx > last_alt_rf_idx + 1) {
 
 					ashes[n_ash].type = CIGAR_DELETION;
 					ashes[n_ash++].len = alt_rf_idx - last_alt_rf_idx - 1;
@@ -1256,6 +1362,18 @@ int match_indel(merge_hash *me, sam **sds, ref_info *rfi, unsigned int start_rd_
 		se->cig->n_ashes -= n_old_ashes - n_new_ashes;
 	debug_msg(fxn_debug, fxn_debug, "n_ash=%u, se->cig->n_ashes=%u\n", n_ash, se->cig->n_ashes);
 	se->cig->ashes = ashes;
+    
+    if (rfi->strand_B) {
+        for (unsigned int i = 0; i < se->cig->n_ashes/2; ++i) {
+            unsigned int tmp_type = se->cig->ashes[se->cig->n_ashes-i-1].type;
+            se->cig->ashes[se->cig->n_ashes-i-1].type = se->cig->ashes[i].type;
+            se->cig->ashes[i].type = tmp_type;
+            unsigned int tmp_len = se->cig->ashes[se->cig->n_ashes-i-1].len;
+            se->cig->ashes[se->cig->n_ashes-i-1].len = se->cig->ashes[i].len;
+            se->cig->ashes[i].len = tmp_len;
+        }
+    }
+
 	debug_msg(fxn_debug, fxn_debug, "New cigar: ");
 	debug_call(fxn_debug, fxn_debug, print_cigar(stderr, se));
 	debug_msg_cont(fxn_debug, fxn_debug, "\n");

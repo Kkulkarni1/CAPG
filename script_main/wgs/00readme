@@ -1,0 +1,8 @@
+RELEASE VERSION
+cmake .
+make # VERBOSE=1 to see compile commands
+
+DEBUG VERSION
+cmake -S . -B debug -DCMAKE_BUILD_TYPE=Debug	# only need to do this once per project
+cmake --build debug # OR cd debug && make VERBOSE=1
+# your debugging version is in the debug subdirectory

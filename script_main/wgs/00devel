@@ -1,11 +1,203 @@
 TODO
 - add a homoeologous SNP call quality (equivalent to GQ) by quantifying how much more support the chosen configuration, e.g. 0/2, has relative to the next best
+- Align indels such that indels in reads aligned to a reference correspond to nearby indels in alignment of subgenomic references. This will allow more loci to be genotyped, instead of being bypassed for no coverage. However this is risky if done blindly, and should only be considered if alignment score is the same
 
 BUG
-- Whey does this accession/locus in peanut have such low expected coverage.  Looking at the alignments, the coverage seems it should be at least 10 on both subgenomes and there is a clear(?) homoeologous SNP here:
+- [resolved] Why does this accession/locus in peanut have such low expected coverage?  Looking at the alignments, the coverage seems it should be at least 10 on both subgenomes and there is a clear(?) homoeologous SNP nearby:
 	err_files/SRR8737062/SRR8737062_494.err-DEBUG [roshan.c::main(1472)]: Expected counts genome A: 0.000 0.000 0.000 1.000
 	err_files/SRR8737062/SRR8737062_494.err-DEBUG [roshan.c::main(1474)]: Expected counts genome B: 0.000 0.000 0.000 1.000
 	err_files/SRR8737062/SRR8737062_494.err-Observed nucleotides (2): GG
 	err_files/SRR8737062/SRR8737062_494.err-Observed   qualities (2): FB
 	...
 	err_files/SRR8737062/SRR8737062_494.err:Genotype (41772411, 16094401,  33, 3497): GG/GG (0.444341) [ 0.444341 0.222185 0.000030 0.222207 0.111111 0.000015 0.000074 0.000037 0.000000]
+
+NEW RESULTS AFTER DEBUG:
+DEBUG [capg.c::main(1509)]: Expected counts genome A: 0.000 0.000 0.000 11.000
+DEBUG [capg.c::main(1511)]: Expected counts genome B: 0.000 0.000 0.000 12.000
+Observed nucleotides (23): GGGGGGGGGGGGGGGGGGGGGGG
+Observed   qualities (23): FFFFFFFFFB<FFFF7FFFBFFB
+...
+Genotype (41772412, 16094400,  33, 3497): GG/GG (0.999267) [ 0.999267 0.000245 0.000000 0.000489 0.000000 0.000000 0.000000 0.000000 0.000000]
+
+- Why is there any evidence of allelic SNP in Accession *78? There are 4 subgenomic mismatches in a row that are recapitulated in the reads, completely in linkage, so why? Is it the up/downstream subgenomic indel differences?
+err_files/SRR4124062/SRR4124062_876.err:Genotype (12736065, 17562979, 7063, 5723): TT/CC (0.954289) [ 0.000000 0.030245 0.954289 0.000000 0.000477 0.014989 0.000000 0.000000 0.000000]+++
+err_files/SRR4124066/SRR4124066_876.err:Genotype (12736065, 17562979, 7063, 5723): TT/CC (0.939549) [ 0.000000 0.036320 0.939549 0.000000 0.001062 0.023069 0.000000 0.000000 0.000000]+++
+err_files/SRR4124068/SRR4124068_876.err:Genotype (12736065, 17562979, 7063, 5723): TT/CC (0.492020) [ 0.000000 0.424708 0.492020 0.000000 0.052271 0.031001 0.000000 0.000000 0.000000]+++
+err_files/SRR4124074/SRR4124074_876.err:Genotype (12736065, 17562979, 7063, 5723): TT/CC (0.730442) [ 0.000000 0.000000 0.000000 0.235529 0.018216 0.000000 0.730442 0.015813 0.000000]+++
+err_files/SRR4124078/SRR4124078_876.err:Genotype (12736065, 17562979, 7063, 5723): CT/CC (0.958429) [ 0.000000 0.000000 0.000000 0.958429 0.006759 0.000000 0.034738 0.000074 0.000000]***
+err_files/SRR8361734/SRR8361734_876.err:Genotype (12736065, 17562979, 7063, 5723): TT/CC (0.999922) [ 0.000000 0.000000 0.000000 0.000063 0.000000 0.000000 0.999922 0.000015 0.000000]+++
+err_files/SRR8361735/SRR8361735_876.err:Genotype (12736065, 17562979, 7063, 5723): TT/CC (0.999944) [ 0.000000 0.000000 0.000000 0.000052 0.000000 0.000000 0.999944 0.000004 0.000000]+++
+err_files/SRR8361736/SRR8361736_876.err:Genotype (12736065, 17562979, 7063, 5723): TT/CC (0.999499) [ 0.000000 0.000500 0.999499 0.000000 0.000000 0.000001 0.000000 0.000000 0.000000]+++
+err_files/SRR8361737/SRR8361737_876.err:Genotype (12736065, 17562979, 7063, 5723): TT/CC (0.995767) [ 0.000000 0.000000 0.000000 0.003989 0.000001 0.000000 0.995767 0.000243 0.000000]+++
+err_files/SRR8361738/SRR8361738_876.err:Genotype (12736065, 17562979, 7063, 5723): TT/CC (0.999968) [ 0.000000 0.000000 0.000000 0.000032 0.000000 0.000000 0.999968 0.000001 0.000000]+++
+err_files/SRR8736998/SRR8736998_876.err:Genotype (12736065, 17562979, 7063, 5723): TT/CC (0.592540) [ 0.000039 0.296290 0.592540 0.000005 0.037044 0.074082 0.000000 0.000000 0.000000]+++
+err_files/SRR8737008/SRR8737008_876.err:Genotype (12736065, 17562979, 7063, 5723): TT/CC (0.790088) [ 0.000000 0.000000 0.000000 0.098781 0.012350 0.000000 0.790088 0.098781 0.000000]+++
+err_files/SRR8737061/SRR8737061_876.err:Genotype (12736065, 17562979, 7063, 5723): TT/CC (0.785082) [ 0.000000 0.000000 0.000000 0.152846 0.012973 0.000000 0.785082 0.049100 0.000000]+++
+err_files/SRR8737062/SRR8737062_876.err:Genotype (12736065, 17562979, 7063, 5723): TT/CC (0.875186) [ 0.000000 0.000000 0.000000 0.109424 0.001710 0.000000 0.875186 0.013680 0.000000]+++
+                                         *
+09:12729001 AAGTATAATG GGCCACTGCC TCGGGTTTTG CACCTCCCCT CTTTCTCTTC
+19:17557255 .......... ..T....... .......C.. ...T...... ..........
+
+            TCTTTTCTTT TGGTTTCTTT TTCTTAATGA GGCGGAGTGG AGGCAAGCCT
+            .G.....-.. .......... .......... .......... ..........
+
+NEW RESULTS AFTER DEBUG
+SRR4124078: Genotype (12736065, 17562979, 7063, 5723): TT/CC (0.999872) [ 0.000000 0.000000 0.000000 0.000096 0.000000 0.000000 0.999872 0.000032 0.000000]+++
+
+
+- Another case: It is true the nearest homoeologous SNP is far away, but all reads traversing it resolve correctly, so why more support for heterozygote than homozygote?
+err_files/SRR4124062/SRR4124062_359.err:Genotype (115781263, 127721644, 5118, 5124): GG/TT (0.768800) [ 0.000000 0.000000 0.000000 0.214855 0.011634 0.000000 0.768800 0.004712 0.000000]+++
+err_files/SRR4124066/SRR4124066_359.err:Genotype (115781263, 127721644, 5118, 5124): GT/GT (0.988765) [ 0.000000 0.002377 0.000108 0.000000 0.988765 0.008750 0.000000 0.000000 0.000000]***
+err_files/SRR4124068/SRR4124068_359.err:Genotype (115781263, 127721644, 5118, 5124): GG/TT (0.492711) [ 0.000000 0.074950 0.492711 0.000000 0.358303 0.074037 0.000000 0.000000 0.000000]+++
+err_files/SRR4124074/SRR4124074_359.err:Genotype (115781263, 127721644, 5118, 5124): TG/TG (0.871297) [ 0.000000 0.000000 0.000000 0.128387 0.871297 0.000000 0.000263 0.000053 0.000000]***
+err_files/SRR4124078/SRR4124078_359.err:Genotype (115781263, 127721644, 5118, 5124): GT/GT (0.946459) [ 0.000000 0.022099 0.017526 0.000001 0.946459 0.013915 0.000000 0.000000 0.000000]***
+err_files/SRR8361734/SRR8361734_359.err:Genotype (115781263, 127721644, 5118, 5124): GG/TT (0.999736) [ 0.000000 0.000096 0.999736 0.000000 0.000003 0.000165 0.000000 0.000000 0.000000]+++
+err_files/SRR8361735/SRR8361735_359.err:Genotype (115781263, 127721644, 5118, 5124): GG/TT (0.999945) [ 0.000000 0.000053 0.999945 0.000000 0.000000 0.000002 0.000000 0.000000 0.000000]+++
+err_files/SRR8361736/SRR8361736_359.err:Genotype (115781263, 127721644, 5118, 5124): TG/TG (0.607010) [ 0.000000 0.000000 0.000000 0.104366 0.607010 0.000000 0.261241 0.027383 0.000000]***
+err_files/SRR8361737/SRR8361737_359.err:Genotype (115781263, 127721644, 5118, 5124): GG/TT (0.999828) [ 0.000000 0.000000 0.000000 0.000150 0.000002 0.000000 0.999828 0.000021 0.000000]+++
+err_files/SRR8361738/SRR8361738_359.err:Genotype (115781263, 127721644, 5118, 5124): GG/TT (0.999983) [ 0.000000 0.000016 0.999983 0.000000 0.000001 0.000000 0.000000 0.000000 0.000000]+++
+err_files/SRR8736998/SRR8736998_359.err:Genotype (115781263, 127721644, 5118, 5124): GG/TT (0.802890) [ 0.000000 0.000001 0.000000 0.171904 0.013980 0.000000 0.802890 0.011225 0.000000]+++
+err_files/SRR8737008/SRR8737008_359.err:Genotype (115781263, 127721644, 5118, 5124): TG/TT (0.676657) [ 0.000000 0.000000 0.000000 0.676657 0.009969 0.000000 0.312763 0.000612 0.000000]***
+err_files/SRR8737061/SRR8737061_359.err:Genotype (115781263, 127721644, 5118, 5124): GG/TT (0.921932) [ 0.000000 0.066984 0.921932 0.000000 0.007645 0.003439 0.000000 0.000000 0.000000]+++
+err_files/SRR8737062/SRR8737062_359.err:Genotype (115781263, 127721644, 5118, 5124): GG/TT (0.925369) [ 0.000000 0.000000 0.000000 0.054958 0.012598 0.000000 0.925369 0.007075 0.000000]+++
+
+NEW RESULTS
+SRR4124078: Genotype (115781263, 127721644, 5118, 5124): GG/TT (0.470642) [ 0.000000 0.000000 0.000000 0.003144 0.209971 0.000000 0.470642 0.316243 0.000000]+++
+The reason the confidence is so low is because there are two reads of low quality that use the ##### quality scores that Illumina used to use to signal the downstream methods to truncate. However, since we do not truncate the read, we interpret the quality # as very low quality. These two reads do not traverse any other mismatches, and the locus in question has quality score #. Therefore, there is very little evidence to assign it to the correct subgenome.
+
+
+- Another case: Few reads traverse the upstream homoeologous SNP (and mismatch), but those that do (except for one case) have them linked, so why so much heterozygosity
+err_files/SRR4124062/SRR4124062_515.err:Genotype (34885418, 22446113, 3643, 2835): AG/AG (0.946376) [ 0.000000 0.000000 0.000000 0.053587 0.946376 0.000031 0.000003 0.000004 0.000000]***
+err_files/SRR4124066/SRR4124066_515.err:Genotype (34885418, 22446113, 3643, 2835): GA/GG (0.758172) [ 0.000000 0.056196 0.001573 0.758172 0.183018 0.000419 0.000607 0.000016 0.000000]***
+err_files/SRR4124068/SRR4124068_515.err:Genotype (34885418, 22446113, 3643, 2835): GA/GA (0.488404) [ 0.000000 0.349378 0.000150 0.161877 0.488404 0.000053 0.000083 0.000054 0.000000]***
+err_files/SRR4124074/SRR4124074_515.err:Genotype (34885418, 22446113, 3643, 2835): GA/GA (0.932817) [ 0.000000 0.000035 0.000000 0.044214 0.932817 0.000000 0.019495 0.003439 0.000000]***
+err_files/SRR4124078/SRR4124078_515.err:Genotype (34885418, 22446113, 3643, 2835): AG/AG (0.999939) [ 0.000000 0.000054 0.000000 0.000001 0.999939 0.000005 0.000000 0.000000 0.000000]***
+err_files/SRR8361734/SRR8361734_515.err:Genotype (34885418, 22446113, 3643, 2835): AG/AG (0.956653) [ 0.000000 0.028899 0.014092 0.000000 0.956653 0.000295 0.000000 0.000061 0.000000]***
+err_files/SRR8361735/SRR8361735_515.err:Genotype (34885418, 22446113, 3643, 2835): AA/AG (0.670572) [ 0.000000 0.670572 0.000015 0.021396 0.308017 0.000000 0.000000 0.000000 0.000000]***
+err_files/SRR8361736/SRR8361736_515.err:Genotype (34885418, 22446113, 3643, 2835): AA/AG (0.389660) [ 0.000000 0.389660 0.000304 0.110330 0.301028 0.000000 0.198150 0.000529 0.000000]***
+err_files/SRR8361737/SRR8361737_515.err:Genotype (34885418, 22446113, 3643, 2835): GG/AA (0.878710) [ 0.000000 0.000000 0.000000 0.049722 0.068648 0.000278 0.878710 0.002642 0.000000]+++
+err_files/SRR8361738/SRR8361738_515.err:Genotype (34885418, 22446113, 3643, 2835): AG/AG (0.963047) [ 0.000000 0.000000 0.000000 0.000630 0.963047 0.000000 0.034048 0.002275 0.000000]***
+err_files/SRR8736998/SRR8736998_515.err:Genotype (34885418, 22446113, 3643, 2835): AA/AG (0.274773) [ 0.000000 0.274773 0.150799 0.272462 0.144305 0.010741 0.137356 0.009564 0.000000]***
+err_files/SRR8737008/SRR8737008_515.err:Genotype (34885418, 22446113, 3643, 2835): AA/AG (0.312407) [ 0.000000 0.312407 0.135425 0.301555 0.127736 0.001343 0.120344 0.001189 0.000000]***
+err_files/SRR8737061/SRR8737061_515.err:Genotype (34885418, 22446113, 3643, 2835): AG/AG (0.707626) [ 0.000000 0.000149 0.000920 0.012919 0.707626 0.086957 0.063313 0.128116 0.000000]***
+err_files/SRR8737062/SRR8737062_515.err:Genotype (34885418, 22446113, 3643, 2835): AG/AA (0.525240) [ 0.000000 0.020203 0.007001 0.525240 0.143960 0.000667 0.301427 0.001501 0.000000]***
+
+DETAILS BEFORE: SRR4124078
+DEBUG [roshan.c::main(1472)]: Expected counts genome A: 0.122 0.000 0.000 6.970
+DEBUG [roshan.c::main(1474)]: Expected counts genome B: 12.878 0.000 0.000 2.030
+Observed nucleotides (22): GGGAAAGAGAAGAAAAGAAAGG
+Observed   qualities (22): /<FFFF#FFFFFFFFFF/FFFF
+Genotype (34885418, 22446113, 3643, 2835): AG/AG (0.999939) [ 0.000000 0.000054 0.000000 0.000001 0.999939 0.000005 0.000000 0.000000 0.000000]***
+prob_heterozygoteA 0.999946, prob_heterozygoteB 0.999993
+DETAILS AFTER: SRR4124078
+Observed nucleotides (32): AAAGAGGGAAAGAGAAGAAAAGAAAGGGAGAA
+Observed   qualities (32): BBFFF/<FFFF#FFFFFFFFFF/FFFF<#<B#
+Genotype (34885419, 22446112, 3643, 2835): GG/AA (0.827278) [ 0.000000 0.000012 0.000000 0.136733 0.035782 0.000000 0.827278 0.000195 0.000000]+++
+
+
+- Failure of ET test? No, this is right. I have improved the output.
+BEFORE UPDATES
+grep -B 13 -A 2 "Genotype (115161500," err_files/*/SRR8*61_188.err
+DEBUG [roshan.c::main(1472)]: Expected counts genome A: 0.000 0.000 6.641 0.487
+DEBUG [roshan.c::main(1474)]: Expected counts genome B: 0.000 0.000 7.359 0.513
+Observed nucleotides (15): TTTTTTTTGTTTTTT
+Observed   qualities (15): FF<<FF<FFFFFFFF
+Genotype (115161500, 117563779, 1022, 1010): TG/TT (0.600626) [ 0.007581 0.383089 0.000099 0.600626 0.003488 0.000000 0.005117 0.000000 0.000000]***
+prob_heterozygoteA 0.604114, prob_heterozygoteB 0.386577
+DEBUG [roshan.c::test_equal_homolog_coverage( 274)]: Equal coverage test: eta = 0.082245; gamma1 = 0.500000; gamma2 = 0.000000; lrt = 0.902756 (-35.346596 -35.797974); pval = 3.420437e-01
+AFTER UPDATES
+
+- [RESOLVED] This must be wrong! It is not wrong.
+There is overwhelming evidence that the genotype is AA/TT when you look at the alignments, but it is easy to miss an upstream mismatch between the subgenomes that is NOT a homoeologous SNP. Thus, all the reads match subgenome A reference at this upstream site. Reads of B subgenome that do not traverse any of the downstream true homologous sites are BETTER EXPLAINED by the A genome reference because of this upstream mismatch with the B reference: the increase in log likelihood in hypothesizing genotype AT/TT instead of AA/TT is about 10 for these reads. Meanwhile the A genome reads that traverse the downstream homologous sites are better explained by AA/TT, but AT/TT explains them pretty well too: the increase in log likelihood for them is only about 0.7. It all comes down to the balance between these two types of reads, and in this case the B subgenome reads looking to avoid that mismatch win.
+
+Is it fixable? Well, I notice that the upstream site is correctly genotyped. I could imagine a scenario where we correct the reference genome when the current reads are in strong disagreement. However, this is a rather involved solution, so unless we can think of something easier, I guess I'll hope that it is not a common problem. It does demonstrate our dependence on good references but also how nearby allelic SNPs can interfere with genotyping. Fortunately, if allelic SNPs are few and far between and most reference mismatches are homoeologous, then we're good. I think the former is true; I'm less certain about the latter. BTW, GATK does not have a problem here and it also explains why simulation did not raise this issue.
+
+BEFORE: err_files/SRR8361738/SRR8361738_257.err
+DEBUG [roshan.c::main(1472)]: Expected counts genome A: 27.000 0.000 4.976 0.000
+DEBUG [roshan.c::main(1474)]: Expected counts genome B: 0.000 0.000 34.024 0.000
+Observed nucleotides (66): TTTTATTATATATTAATATTTATTTAATATTTTTAAAATTTTTATTTAATATATTTTATAAATAAA
+Observed   qualities (66): J<JJ<JJJFFFJFFAJJJJJJJAJJJ<JJJJJJJJ-JJ-JFJJJJJJJJJJ7JJ-<-JJF<A<JFA
+...
+Genotype (141434330, 143555173, 1350, 1348): TA/TT (1.000000) [ 0.000000 0.000000 0.000000 1.000000 0.000000 0.000000 0.000000 0.000000 0.000000]***
+prob_heterozygoteA 1.000000, prob_heterozygoteB 0.000000
+DEBUG [roshan.c::test_equal_homolog_coverage( 274)]: Equal coverage test: eta = 0.567308; gamma1 = 0.500000; gamma2 = 0.000000; lrt = 7.809182 (-567.114381 -571.018972); pval = 5.198144e-03
+AFTER: notice we add two more reads covering A subgenome, yet it is still not enough to counterbalance the bad signal coming from subgenome B
+INFO [capg.c::main(1532)]: Expected counts genome A:  29.000 0.000 4.976 0.000
+INFO [capg.c::main(1534)]: Expected counts genome B:  0.000 0.000 34.024 0.000
+Observed nucleotides (68): TTTTATTATATATTAATATTTATATTAATATTTTTAAAATTTTTATATTAATATATTTTATAAATAAA
+Observed   qualities (68): J<JJ<JJJFFFJFFAJJJJJJJA-JJJ<JJJJJJJJ-JJ-JFJJJJ7JJJJJJ7JJ-<-JJF<A<JFA
+...
+Genotype (141434330, 143555173, 1350, 1348): TA/TT (1.000000) [ 0.000000 0.000000 0.000000 1.000000 0.000000 0.000000 0.000000 0.000000 0.000000]***
+prob_heterozygoteA 1.000000, prob_heterozygoteB 0.000000
+INFO [capg.c::test_equal_homolog_coverage( 288)]: Equal coverage test (subgenome 0): eta = 0.573818, gamma1 = 0.257149, gamma2 = 1.000000 vs. eta = 0.580630, gamma1 = 0.500000, gamma2 = 0.000000; lrt = 9.278056 (-613.737365 -618.376393); pval = 2.319155e-03
+
+
+- [RESOLVED] Why is this so confident when not identifiable? It was the alignment bug.
+err_files/SRR8361735/SRR8361735_233.err:Genotype (135638861, 137807958, 1441, 1429): CT/CT (0.999841) [ 0.000000 0.000000 0.000000 0.000001 0.999841 0.000158 0.000000 0.000000 0.000000]***
+BEFORE
+DEBUG [roshan.c::main(1472)]: Expected counts genome A: 0.000 30.996 0.159 0.000
+DEBUG [roshan.c::main(1474)]: Expected counts genome B: 0.000 0.004 27.841 0.000
+Observed nucleotides (59): TCCCTTTCCCTTTTCCCCTCTTTTCTCTTTCCTCCCCCCCCCCTTTCCTTTCTCCCTTT
+Observed   qualities (59): A<JFJJJJFF-JJJJJJJJJJJFJJJJAJJJJJJJJJJJJJJJJFJJJJJJJJJ7JAFJ
+Genotype (135638861, 137807958, 1441, 1429): CT/CT (0.999841) [ 0.000000 0.000000 0.000000 0.000001 0.999841 0.000158 0.000000 0.000000 0.000000]***
+prob_heterozygoteA 1.000000, prob_heterozygoteB 0.999841
+DEBUG [roshan.c::test_equal_homolog_coverage( 274)]: Equal coverage test: eta = 0.852770; gamma1 = 0.500000; gamma2 = 0.001817; lrt = 3.105931 (-225.412386 -226.965352); pval = 7.800760e-02
+DEBUG [roshan.c::test_equal_homolog_coverage( 274)]: Equal coverage test: eta = 0.833855; gamma1 = 0.563908; gamma2 = 0.500000; lrt = 3.919430 (-225.412386 -227.372101); pval = 4.773107e-02
+AFTER: SRR8361735
+INFO [capg.c::main(1531)]: Expected counts genome A:  0.000 37.974 0.024 0.000
+INFO [capg.c::main(1533)]: Expected counts genome B:  0.000 0.026 35.976 0.000
+Observed nucleotides (74): TCTCCTCCCTTTCCCTTTTCCCCCTCTTTTCTCTTTCCTCCCCCCCCCCTTTCCTTTTTCTCCCTTTCCTTCTT
+Observed   qualities (74): AAAFFA<JFJJJJFF-JJJ-JJJJJJJJFJJJJAJJJJJJJJJJJJJJJJFJJJFJJJJJJJ7JAFJJJJFAFA
+Genotype (135638861, 137807958, 1441, 1429): CC/TT (0.992194) [ 0.000000 0.000022 0.992194 0.000000 0.007783 0.000002 0.000000 0.000000 0.000000]+++
+
+- [RESOLVED] Why are the heterozygote calls so confident? There are linking reads and totally ambiguous reads!
+err_files/SRR4124062/SRR4124062_398.err:Genotype (2881470, 4200087, 3313, 3328): CC/AA (0.643633) [ 0.000000 0.000000 0.000000 0.350238 0.004880 0.000000 0.643633 0.001248 0.000000]+++
+err_files/SRR4124066/SRR4124066_398.err:Genotype (2881470, 4200087, 3313, 3328): AC/AA (0.988892) [ 0.000000 0.000000 0.000000 0.988892 0.008640 0.000000 0.002461 0.000008 0.000000]***
+err_files/SRR4124068/SRR4124068_398.err:Genotype (2881470, 4200087, 3313, 3328): CC/AA (0.827860) [ 0.000000 0.155714 0.827860 0.000000 0.003302 0.013124 0.000000 0.000000 0.000000]+++
+err_files/SRR4124074/SRR4124074_398.err:Genotype (2881470, 4200087, 3313, 3328): AC/AC (0.993427) [ 0.000000 0.000000 0.000000 0.004995 0.993427 0.000000 0.000288 0.001290 0.000000]***
+err_files/SRR4124078/SRR4124078_398.err:Genotype (2881470, 4200087, 3313, 3328): CC/AA (0.768419) [ 0.000000 0.000000 0.000000 0.130148 0.041712 0.000000 0.768419 0.059721 0.000000]+++
+err_files/SRR8361734/SRR8361734_398.err:Genotype (2881470, 4200087, 3313, 3328): CC/CA (0.803741) [ 0.000000 0.803741 0.190256 0.000000 0.005817 0.000186 0.000000 0.000000 0.000000]***
+err_files/SRR8361735/SRR8361735_398.err:Genotype (2881470, 4200087, 3313, 3328): CC/CA (0.978838) [ 0.000000 0.978838 0.010585 0.000000 0.010576 0.000001 0.000000 0.000000 0.000000]***
+err_files/SRR8361736/SRR8361736_398.err:Genotype (2881470, 4200087, 3313, 3328): CC/AA (0.999290) [ 0.000000 0.000709 0.999290 0.000000 0.000000 0.000001 0.000000 0.000000 0.000000]+++
+err_files/SRR8361737/SRR8361737_398.err:Genotype (2881470, 4200087, 3313, 3328): CC/AA (0.987948) [ 0.000000 0.012034 0.987948 0.000000 0.000011 0.000008 0.000000 0.000000 0.000000]+++
+err_files/SRR8361738/SRR8361738_398.err:Genotype (2881470, 4200087, 3313, 3328): CC/AA (0.999022) [ 0.000000 0.000978 0.999022 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000]+++
+err_files/SRR8736998/SRR8736998_398.err:Genotype (2881470, 4200087, 3313, 3328): CC/AA (0.753363) [ 0.000000 0.178995 0.753363 0.000000 0.042623 0.025015 0.000000 0.000004 0.000000]+++
+err_files/SRR8737008/SRR8737008_398.err:Genotype (2881470, 4200087, 3313, 3328): CC/AA (0.571244) [ 0.000000 0.035051 0.571244 0.000000 0.188834 0.204871 0.000000 0.000000 0.000000]+++
+err_files/SRR8737061/SRR8737061_398.err:Genotype (2881470, 4200087, 3313, 3328): CC/CA (0.551850) [ 0.000000 0.551850 0.228345 0.157574 0.061638 0.000593 0.000000 0.000000 0.000000]***
+err_files/SRR8737062/SRR8737062_398.err:Genotype (2881470, 4200087, 3313, 3328): AC/AA (0.647161) [ 0.000000 0.000012 0.000000 0.647161 0.177812 0.000000 0.173681 0.001333 0.000000]***
+
+BEFORE: SRR4124078
+DEBUG [roshan.c::main(1472)]: Expected counts genome A: 0.002 6.010 0.000 0.000
+DEBUG [roshan.c::main(1474)]: Expected counts genome B: 8.998 0.990 0.000 0.000
+Observed nucleotides (16): ACAACAAACCACCCAA
+Observed   qualities (16): F/BFF<<FFF7FFF/B
+Genotype (2881470, 4200087, 3313, 3328): CC/AA (0.768419) [ 0.000000 0.000000 0.000000 0.130148 0.041712 0.000000 0.768419 0.059721 0.000000]+++
+prob_heterozygoteA 0.171860, prob_heterozygoteB 0.101433
+AFTER: SRR4124078
+Observed nucleotides (24): CAAACAAACAAAACCACCCAAAAA
+Observed   qualities (24): #B#F/BBFF<<<FFF7FFF/BB7#
+Genotype (2881470, 4200087, 3313, 3328): CC/AA (0.968588) [ 0.000000 0.000000 0.000000 0.031314 0.000015 0.000000 0.968588 0.000083 0.000000]+++
+--
+BEFORE: SRR8737061
+DEBUG [roshan.c::main(1472)]: Expected counts genome A: 0.000 10.999 0.000 0.000
+DEBUG [roshan.c::main(1474)]: Expected counts genome B: 4.000 0.001 0.000 0.000
+Observed nucleotides (15): ACACCCCACCCCACC
+Observed   qualities (15): FFFBF<FFFFBFFFF
+Genotype (2881470, 4200087, 3313, 3328): CC/CA (0.551850) [ 0.000000 0.551850 0.228345 0.157574 0.061638 0.000593 0.000000 0.000000 0.000000]***
+prob_heterozygoteA 0.219805, prob_heterozygoteB 0.613489
+DEBUG [roshan.c::test_equal_homolog_coverage( 274)]: Equal coverage test: eta = 0.683449; gamma1 = 0.000000; gamma2 = 0.500000; lrt = 3.973001 (-9.143596 -11.130097); pval = 4.623531e-02
+AFTER: SRR8737061
+Observed nucleotides (24): CAAACAAACAAAACCACCCAAAAA
+Observed   qualities (24): #B#F/BBFF<<<FFF7FFF/BB7#
+Genotype (2881470, 4200087, 3313, 3328): CC/AA (0.968588) [ 0.000000 0.000000 0.000000 0.031314 0.000015 0.000000 0.968588 0.000083 0.000000]+++
+
+- Followup question: There are far fewer heterozygous calls now, but still tens of them. Why the strong support for heterozygote here? It is because there is a T which is substantially better explained by hypothesizing at least one T allele in the genotype. All other reads can be explained almost equally well by homozygous and heterozygous genotypes. Why the preference for GT in subgenome B? Because subgenome A coverage is higher, and thus all those reads cumulatively are not well-explained by genotype GT/GG. Furthermore the single T read does not traverse a subgenomic mismatch, so it is equally well-explained by either GG/GT or GT/GG.  How could we improve this? A more sophisticated error model. Quality score recalibration. Accounting for PCR errors (high quality scores with errors), as the evidence is even strong if T is paired with QS F, for example. Or maybe not at all. It is caught by the equal homologous coverage test at level 0.05.
+Also, this particular case will not end up in the dataset we use because subgenome B coverage is < 8. A combination of substantial coverage and equal homologous coverage test should catch most of these freak or PCR errors.
+Genotype: SRR8737061
+DEBUG [capg.c::main(1517)]: Expected counts genome A: 0.000 0.000 0.500 14.000
+DEBUG [capg.c::main(1519)]: Expected counts genome B: 0.000 0.000 0.500 7.000
+Observed nucleotides (22): GGGGGGGGGGGGGGGGGGGGGT
+Observed   qualities (22): <FF<FB<F/FFFFF<FFF/BF<
+Genotype (2882576, 4201202, 4419, 4443): GG/GT (0.763937) [ 0.229917 0.763937 0.000000 0.006061 0.000085 0.000000 0.000000 0.000000 0.000000]***
+prob_heterozygoteA 0.006146, prob_heterozygoteB 0.764022
+

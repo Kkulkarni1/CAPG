@@ -2,9 +2,12 @@ CC =	gcc
 
 CFLAGS = -Wall -Wextra -pedantic -O3 -std=c11 -D_POSIX_C_SOURCE=200112L -D_XOPEN_SOURCE=500		# c11 with POSIX 20 112L and optimization
 
+EXE = capg_wgs
+
 # -e DBG=1
 ifdef DBG
 	CFLAGS = -Wall -Wextra -pedantic -g -std=c11 -D_POSIX_C_SOURCE=200112L -D_XOPEN_SOURCE=500 -DDEBUGGING_ON		# debugging
+	EXE = capg_wgs_db
 endif
 # -e PROF=1
 ifdef PROF
@@ -46,7 +49,7 @@ deps = $(srcs:.c=.d)
 capg_objs = capg.o sam.o sequence.o nuc.o qual.o error.o fastq.o align.o io.o cmdline.o order.o pick_reads.o vcf.o pgamma.o lgamma.o gamma.o lgammacor.o dpois.o pchisq.o dnorm.o pnorm.o fmax2.o cospi.o stirlerr.o bd0.o mlutils.o chebyshev.o
 
 capg_wgs:	$(capg_objs)
-	$(CC) -o capg_wgs $(capg_objs) $(CFLAGS) $(LDFLAGS) -lz
+	$(CC) -o $(EXE) $(capg_objs) $(CFLAGS) $(LDFLAGS) -lz
 
 include $(deps)
 
@@ -60,7 +63,7 @@ archive:
 	tar czvf capg_wgs.tar.gz $(srcs) $(hds) makefile
 
 clean:	
-	-rm $(objs) $(deps) capg_wgs 2>/dev/null
+	-rm $(objs) $(deps) capg_wgs capg_wgs_db 2>/dev/null
 
 clear:
 	rm $(objs)

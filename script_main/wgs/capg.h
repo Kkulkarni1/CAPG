@@ -20,7 +20,7 @@ struct _input {
 					 *   merge hash, but not in fastq file */
 	unsigned int *assignment;	/*<! assigned cluster of each read */
 	unsigned int K;			/*<! no. haplotypes (clusters) */
-	unsigned int proptest;		/*<! levels of screeing based on prop test: 0 means not screeing, 1 means rejecting the null that has 4 haplotypes, 2 rejects the null that has 3 haplotyoes */
+	unsigned char proptest;		/*<! levels of screeing based on prop test: 0 means not screeing, 1 means rejecting the null that has 4 haplotypes, 2 rejects the null that has 3 haplotyoes */
 	unsigned int n_prop_exclude;
 	size_t n_excluded;		/*<! no. of excluded haplotypes */
 	size_t n_excluded_id;		/*<! no. of excluded reads by cut-off */
@@ -30,28 +30,20 @@ struct _input {
 
 
 struct _options {
-	unsigned char drop_unmapped;	/*<! drop reads that are unmapped
-					 * in either alignment
-					 */
-	unsigned char drop_secondary;	/*<! drop secondary alignments */
-	unsigned char display_alignment;/*<! display alignments to stderr */
-	int drop_soft_clipped;		/*<! drop reads soft-clipped by this
+	unsigned int drop_soft_clipped;	/*<! drop reads soft-clipped by this
 					 * length of more in either alignment
 					 */
-	int drop_indel;			/*<! drop reads whose alignments
+	unsigned int drop_indel;	/*<! drop reads whose alignments
 					 * contain indel this long or more
 					 * in either alignment
 					 */
-	int proptest_screen;		/*<! drop reads according to abundance test */
+	unsigned int min_length;	/*<! drop reads shorter than this */
+	unsigned int max_length;	/*<! drop reads longer than this */
 	double weight_penalty;		/*<! drop reads whose coverage */
 	double biallelic_screen;	/*<! drop sites w/ >2 alleles */
 	double min_expected_coverage;	/*<! abort if subgenome coverage < this */
-	int posthoc_coverage_test;	/*<! perform post hoc coverage test */
-    int equal_homolog_coverage_test; /*<! perform equal coverage test */
 	double min_genotype_post_prob;	/*<! min. posterior probability to call heterozygote */
 	double min_alignment_post_prob;	/*<! min. posterior probability of alignment */
-	int min_length;			/*<! drop reads shorter than this */
-	int max_length;			/*<! drop reads longer than this */
 	double max_eerr;		/*<! drop reads with more expected
 					 * errors than this
 					 */
@@ -65,7 +57,7 @@ struct _options {
 	const char *fsa_files[N_FILES];	/*<! fsa files */
 	const char *ref_names[N_FILES];	/*<! name of references */
 	const char *vcf_files[N_FILES];	/*<! vcf files */
-    const char *output_file;    /*<! final output file */
+	const char *output_file;	/*<! final output file */
 	vcf_options *vcf_opt;		/*<! output genotype likelihoods */
 	const char *extracted_rf; /*<! targeted reference fsa file name */
 	int write_fastq_and_quit;	/*<! unexcluded reads to fastq */
@@ -76,6 +68,21 @@ struct _options {
 	const char *coverage_file;
 	char const *sam_file;		/*<! reference sam file */
 	const char *sample_name;	/*<! name of accession */
+
+	unsigned char display_alignment;/*<! display alignments to stderr */
+	unsigned char drop_unmapped;	/*<! drop reads that are unmapped
+					 * in either alignment
+					 */
+	unsigned char proptest_screen;	/*<! {0,1,2,3} drop reads according to abundance test */
+	unsigned char drop_secondary;	/*<! drop secondary alignments */
+	unsigned char equal_homolog_coverage_test; /*<! perform equal coverage test */
+	unsigned char posthoc_coverage_test;	/*<! perform post hoc coverage test */
+	/* this is how we ran CAPG: references are chrom:start-end,
+	 * where start, end are 0-based [inclusive, exclusive), but 
+	 * the default is now samtools format, where start, end are
+	 * 1-based, [inclusive, inclusive].
+	 */
+	unsigned char legacy_region_specification;
 };
 
 typedef struct nuc_state {
@@ -97,7 +104,6 @@ typedef struct mlogit_stuff {
 int read_ampliclust_results(FILE *fp, input *in);
 int make_input(input **in);
 void free_input(input *in);
-double ll_align(sam_entry *se, unsigned int i, unsigned char *ref, mlogit_stuff *vptr, unsigned char *show, size_t start_rf);
 int default_options(options *opt);
 int parse_options_capg(options *opt, int argc, const char **argv);
 nuc_state *read_param_file(char const *param_file);

@@ -50,36 +50,35 @@ struct _cigar {
 	ash *ashes;
 };
 
-struct _sam_entry {
-	size_t new_pos;
-	size_t new_len;
-	size_t *uni_aln;
-	int *rd_map;
-	size_t pos;
-	char *name;
-	sequence *read;
-	sequence *qual;
-	cigar *cig;
-	uint32_t ref;
-	uint16_t flag;
-	unsigned char exclude;
-	unsigned int which_ref; 		/* which targeted region */
-	char *ref_name;			/* ref_name(w/ location): A:1-20 */
-	size_t length_rf; 		/* consumed reference length */
-	unsigned int index; 		/* index used to output data */
-	char *name_s; 			/* read name w/ +:forward, -:reverse */
+struct _sam_entry {			/* see VCF specification */
+	char *name;			/* NAME */
+	sequence *read;			/* sequence of read */
+	sequence *qual;			/* qualities of read */
+	cigar *cig;			/* CIGAR */
+	size_t pos;			/* POS */
 	double ll_aln;			/* alignment likelihood */
+	unsigned int which_ref; 	/* which external reference */
+	unsigned int index; 		/* index used to output data */
+	uint32_t ref;			/* index of reference: see sam */
+	uint16_t flag;			/* FLAG */
+	unsigned char exclude;		/* exclude this SAM entry */
+//	char *ref_name;			/* ref_name(w/ location): A:1-20 */
+//	char *name_s; 			/* read name w/ +:forward, -:reverse */
 };
 
 struct _sam {
 	sam_entry *se;		/* sam entries */
+	char *rname_ptr;	/* contiguous memory for reference names */
+	char **ref_names;	/* pointers to reference names */
+
+	/* for indexing to reference, either internal or external */
+	size_t *n_per_ref;	/* no. entries per [external] ref */
+	size_t **ref_list;	/* entries per [external] ref */
+
 	size_t n_se;		/* no. sam entries: alignments or reads */
 	uint32_t n_ref;		/* no. of references */
 	size_t hash_length;	/* length of hash */
-	char *ref_names;	/* reference names */
 	size_t n_mapping;	/* no. of mappings */
-	size_t *n_per_ref;	/* no. entries per ref */
-	size_t **ref_list;	/* entries per ref */
 };
 
 #define HASH_NAME	1
@@ -106,16 +105,17 @@ struct _merge_hash {
 };
 
 /* input */
-int read_sam(FILE *fp, sam **s_in);
+int read_sam(FILE *fp, sam **s_in, unsigned char, unsigned char);
 int read_bam(gzFile gzfp, sam **s_in);
 
 /* processing */
-int hash_sam(sam *s, sam_hash **sh_in, int hash_on, size_t rindex, unsigned int n_ref, unsigned char drop_unmapped, unsigned char drop_second, unsigned char drop_soft_clipped, unsigned char drop_indel, unsigned int min_length, unsigned int max_length, double max_exp_err);
+int hash_sam(sam *s, sam_hash **sh_in, int hash_on, size_t n_ref, unsigned char drop_unmapped, unsigned char drop_second, unsigned int drop_soft_clipped, unsigned int drop_indel, unsigned int min_length, unsigned int max_length, double max_exp_err);
 size_t hash_merge(merge_hash **mh, unsigned int nfiles, sam **sds, size_t *rindex);
-int match_soft_clipping(merge_hash *mh, unsigned int nalign, sam **sds,
-			size_t *start_pos, size_t *end_pos, unsigned int B_strand);
 int fill_hash(sam *s, sam_hash *sh, unsigned int n_ref);
 /* output */
 int output_error_data(FILE *fp, sam_entry *se, unsigned char *ref, double lprob);
+void reverse_in_place(sam_entry *se);
+void print_cigar(FILE *file, sam_entry *se);
+
 
 #endif

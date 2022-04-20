@@ -61,7 +61,7 @@ The software requires multiple input files.
 
 3. SAM file containing the alignments of selected target regions in each subgenome to each other.  Pass it in via the ```--geno``` command-line option.
 
-It also requires several command-l-ne options.
+It also requires several command-line options.
 
 1. You must name the target regions to genotype, including the chromosome name and the start and end positions relative to the whole chromosome.
 For example, ```chr1:1-10``` means you want to genotype from position 1 to 10 (1 based) in chromosome 1. Use ':' to seperate chromosome name and region index. Use '-' to seperate start and end positions.

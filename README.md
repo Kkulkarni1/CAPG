@@ -88,15 +88,18 @@ Please run `./capg_wgs -h` for detailed information about all available options.
 # Tutorial <a name = "tutorial" />
 
 All the files used and created in this tutorial are in the `data` folder. 
-The selected regions we want to genotye are passed to `--ref_names`, in this example we will genotype positions 1 to 5000, the whole genome references are given to `--fsa_files` and the reads alignments to whole genome references are passed to `--sam_files`, the alignment of selected regions are passed to `--geno` and the prefix of selected regions can be given by `-j` (this will output prefix0.fsa and prefix1.fsa), and finally `--vcf_files` option output the genotypes.
+In this example we will genotype positions 1 to 5000 of both subgenomes assuming they are homoeologous.
+We specify the filename prefix where the selected regions will be output via `-j` (the actual files will be called `prefix0.fsa` and `prefix1.fsa`); you will likely want to delete these files
+after the run completes.
+Finally, we store the output in VCF files, whose names are provided via the `--vcf_files` option.
 
-Only one command line is required for genotyping:
+The command line for genotyping is:
 
 ```
 ./capg_wgs --ref_names Genome_A:0-5000 Genome_B:0-5000 --sam_files ../../data/aln0A.sam ../../data/aln0B.sam --fsa_files ../../data/refA.fa ../../data/refB.fa --geno ../../data/ref.sam -j ../../data/extracted --vcf_files ../../data/A.vcf ../../data/B.vcf
 ```
 
-The positions with coverage 0 will not be outputed
+The positions with no coverage in the first genome will not be outputed.
 
 # How to Cite <a name = "cite" />
 

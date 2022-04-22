@@ -881,6 +881,11 @@ int main(int argc, const char *argv[])
 		mmessage(INFO_MSG, NO_ERROR, "Read extent on subgenome %u: [%u, %u)\n",
 			 i, rf_info->alignment_start[i], rf_info->alignment_end[i]);
 
+	mmessage(INFO_MSG, NO_ERROR, "Target extent on subgenome 0: [%u, %u) legacy=%d\n",
+		 rf_info->start_A, rf_info->end_A, opt.legacy_region_specification);
+	mmessage(INFO_MSG, NO_ERROR, "Target extent on subgenome 1: [%u, %u)\n",
+		 rf_info->start_B, rf_info->end_B);
+
 	/* extend reference regions to at least cover the user-selected
 	 * target region
 	 */
@@ -3467,7 +3472,7 @@ void fprint_usage(FILE *fp, const char *cmdname, void *obj) {
 	fprintf(fp, "\t+++++++++++++++++++++++++++++++++++++++++++\n");
 	fprintf(fp, "\tScreening reads, coverage checks:  optional\n");
 	fprintf(fp, "\t+++++++++++++++++++++++++++++++++++++++++++\n");
-	fprintf(fp, "\t--eq <pint>\n\t\tEqual coverage test. (Default: %s)\n", opt->equal_homolog_coverage_test ? "yes" : "no");
+	fprintf(fp, "\t--equal\n\t\tEqual homologous coverage test. (Default: %s)\n", opt->equal_homolog_coverage_test ? "yes" : "no");
 	fprintf(fp, "\t--expected_errors <dbl>\n\t\tDiscard reads with more "
 		"than <dbl> expected errors (Default: %f).\n", opt->max_eerr);
 	fprintf(fp, "\t--indel <i>\n\t\tDrop reads with alignments containing "

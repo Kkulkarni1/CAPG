@@ -3019,7 +3019,6 @@ int default_options(options *opt)
 	opt->drop_soft_clipped = UINT_MAX;
 	opt->drop_indel = UINT_MAX;
 	opt->proptest_screen = 0;
-	opt->weight_penalty = 1;
 	opt->min_length = 0;
 	opt->max_length = 0;
 	opt->min_log_likelihood = -INFINITY;
@@ -3351,13 +3350,6 @@ int parse_options_capg(options *opt, int argc, const char **argv)
 				 4 - opt->proptest_screen);
 			break;
 
-		case 'c':
-			opt->weight_penalty = read_cmdline_double(argc, argv,
-								++i, opt);
-			mmessage(INFO_MSG, NO_ERROR, "Add tunning parameter for penalty: %f\n",
-							opt->weight_penalty);
-			break;
-
 		default:
 			err = INVALID_CMD_OPTION;
 			goto CMDLINE_ERROR;
@@ -3387,122 +3379,145 @@ void fprint_usage(FILE *fp, const char *cmdname, void *obj) {
 		fputc(toupper(cmdname[i]), fp);
 	fprintf(fp, "(%d)\n", 1);
 	fprintf(fp, "\nNAME\n\t%s - genotype tetraploids\n", &cmdname[start]);
-	fprintf(fp, "\nSYNOPSIS\n\t%s --sam_files <fsam1> <fsam2> --fsa_files "
-		"<fsa1> <fsa2> --ref_names <sref1> <sref2> --g <refsam> --j <reffsa>\n\t\t"
-		"[--vcf_files --min-subgenomic-coverage <dbl>]\n\t\t"
-		"[--min <int> --max <int> --expected-errors <dbl> --indel <int> --loglike <dbl>"
-		" --secondary --soft-clipped <int> --coverage <dbl>]\n\t\t"
-//		"[--p <int> --amp <exe> [--ampliclust-f <ffastq> --ampliclust-o <str> --ampliclust-l <dbl>]]\n\t\t"
-		"[ --o <fout> --error_file|--error_data <ferr>] ...]\n",
+/******************************************************************************/
+	fprintf(fp, "\nSYNOPSIS\n\t%s --sam_files <fsam1> <fsam2> --fsa_files <fsa1> <fsa2>\n\t\t"
+		"--ref_names <sref1> <sref2> --geno <refsam>\n",
 		&cmdname[start]);
-	fprintf(fp, "\nDESCRIPTION\n\t%s genotypes tetraploids' targeted genome regions using"
-		" screened reads in <fsam1> and <fsam2> aligned to the whole genome references"
-		" from fasta files <fsa1> <fsa2>\n",
-		&cmdname[start]);
-	fprintf(fp, "\nNOTICE\n\t%s requires the reference names (appeared in <refsam>) to contain"
-		" start (0 based) and end position (1 based) of the targeted genome regions "
-		"relative to the whole genome. Using ':' to seperate original genome name "
-		"(appeared in <fsam1> and <fsam2>) and region index, '-' to seperate start "
-		"and end position (e.g. chr1:0-11, which starts at 1st position in 'chr1' and "
-		"end at 11th position, length is 11 bases)\n",
-		&cmdname[start]);
+	fprintf(fp, "\nDESCRIPTION\n\t"
+	"Genotype targeted genome regions in allotetraploids using screened\n\t"
+	"reads in <fsam1> and <fsam2> aligned to the whole genome references\n\t"
+	"from fasta files <fsa1> <fsa2>.\n");
+
+	fprintf(fp, "\nNOTICE\n\t"
+	"Requires the reference names (appearing in <refsam>) to contain start\n\t"
+	"(1-based) and end position (1-based) of the targeted genome regions\n\t"
+	"relative to the whole chromosome. Use ':' to seperate original genome\n\t"
+	"name (appearing in <fsam1> and <fsam2>) and region index, '-' to\n\t"
+	"seperate start and end position (e.g. chr1:1-11, which starts at 1st\n\t"
+	"position in 'chr1' and end at 11th position, length is 11 bases)\n");
+
 	fprintf(fp, "\nOPTIONS\n");
-	fprintf(fp, "\t+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
+	fprintf(fp, "\t++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
 	fprintf(fp, "\tInput: all required\n");
-	fprintf(fp, "\t+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
-	fprintf(fp, "\t--fsa_files <fsa1> <fsa2>\n\t\tSpecify fasta files "
-		"containing subgenomic reference sequences [use samtools faidx to index the files]"
-		" (Default: none).\n");
-	fprintf(fp, "\t--sam_files <fsam1> <fsam2>\n\t\tSpecify sam files "
-				"containing alignments (Default: none)\n");
-//	fprintf(fp, "\t--bam_files <fbam1> <fbam2>\n\t\tSpecify bam files "
-//				"containing alignments (Default: none)\n");
-	fprintf(fp, "\t--ref_names <sref1> <sref2>\n\t\tSpecify target regions "
-		"chrom:start-end format, where these names must exist in "
-		"reference alignment files (--geno) and chrom appear in "
-		"FASTA files (--fsa_files). The integers start and end are "
-		"1-based, inclusive, as used by samtools (Default: none\n");
-	fprintf(fp, "\t--geno <refsam>\n\t\tSpecify name of sam file of aligning "
-		"<sref2> to <sref1> (Default: none)\n");
-	fprintf(fp, "\t--j <reffsa>\n\t\tSpecify prefix of targeted fsa files to be extracted "
-		" by samtools [Set samtools in system PATH] (Default: extracted)\n");
-	fprintf(fp, "\t+++++++++++++++++\n");
-	fprintf(fp, "\tOutput:  all optional except for --vcf_files\n");
-	fprintf(fp, "\t+++++++++++++++++\n");
+	fprintf(fp, "\t++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
+	fprintf(fp, "\t--fsa_files FILE FILE\n\t\t"
+		"Specify fasta files containing subgenomic reference\n\t\t"
+		"sequences [assumed indexed with samtools faidx] (Default: none)\n");
+
+	fprintf(fp, "\t--sam_files FILE FILE\n\t\t"
+		"Specify sam files containing alignments (Default: none)\n");
+//	fprintf(fp, "\t--bam_files FILE FILE\n\t\t"
+//		"Specify bam files containing alignments (Default: none)\n");
+	fprintf(fp, "\t--ref_names STR STR\n\t\t"
+		"Specify target regions chrom:start-end format, where these\n\t\t"
+		"same names must exist in reference alignment files (--geno)\n\t\t"
+		"and chrom must appear in FASTA files (--fsa_files) The\n\t\t"
+		"integers start and end are 1-based, inclusive, as used by\n\t\t"
+		"samtools (Default: none\n");
+	fprintf(fp, "\t--geno FILE\n\t\t"
+		"Specify name of sam file aligning subgenome target(s) in A to\n\t\t"
+		"subgenome target(s) in B (Default: none)\n");
+	fprintf(fp, "\t--j STR\n\t\t"
+		"Specify prefix of FASTA files to store extracted target regions\n\t\t"
+		"[samtools must be in system PATH] (Default: extracted)\n");
+	fprintf(fp, "\t++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
+	fprintf(fp, "\tOutput:  all optional\n");
+	fprintf(fp, "\t++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
 //	fprintf(fp, "\t--censor <int>\n\t\tCurrent code censors quality scores "
 //		"at maximum 41 [This option is not used!]\n");
-	fprintf(fp, "\t--display_alignment\n\t\tDisplay alignments in stderr "
-		"output (Default: %s).\n", opt->display_alignment ? "yes" : "no");
-	fprintf(fp, "\t--vcf_files FILE1 FILE2\n"
-		"\t\tGenotyping output in one vcf file per subgenome (Default: none).\n");
-	fprintf(fp, "\t--gl\n"
-		"\t\tToggle GL output to vcf files (Default: %s).\n", opt->vcf_opt->output_gl ? "yes" : "no");
-	fprintf(fp, "\t--name STRING\n"
-		"\t\tName of accession/individual/genotype; used in vcf header (Default: none).\n");
-	fprintf(fp, "\t--o <fout>\n\t\tSpecify file with "
-		"the final output (Default: none).\n");
-	fprintf(fp, "\t++++++++++++++++++++++++++++++\n");
+	fprintf(fp, "\t--display_alignment\n\t\t"
+		"Display alignments on stderr output (Default: %s)\n",
+				opt->display_alignment ? "yes" : "no");
+	fprintf(fp, "\t--vcf_files FILE FILE\n\t\t"
+		"Output in one vcf file per subgenome (Default: none)\n");
+	fprintf(fp, "\t--gl\n\t\t"
+		"Toggle GL output to vcf files (Default: %s)\n", opt->vcf_opt->output_gl ? "yes" : "no");
+	fprintf(fp, "\t--name STR\n\t\t"
+		"Name of individual for vcf header (Default: none)\n");
+	fprintf(fp, "\t--o FILE\n\t\t"
+		"Specify file with unformatted output (Default: none)\n");
+	fprintf(fp, "\t++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
 	fprintf(fp, "\tError recalibration:  optional\n");
-	fprintf(fp, "\t++++++++++++++++++++++++++++++\n");
-	fprintf(fp, "\t--error_file <ferr>\n\t\tSpecify file with "
-		"estimates of error rates (Default: none).\n");
-	fprintf(fp, "\t--error_data <ferr>\n\t\tSpecify file to output "
-		"observed errors (Default: none).\n");
-//	fprintf(fp, "\t++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
+	fprintf(fp, "\t++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
+	fprintf(fp, "\t--error_file FILE\n\t\t"
+		"Specify file with estimates of error rates (Default: none)\n");
+	fprintf(fp, "\t--error_data FILE\n\t\t"
+		"Specify file to output observed errors (Default: none)\n");
+//	fprintf(fp, "\t++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
 //	fprintf(fp, "\tScreening paralogs and other contaminants:  optional\n");
-//	fprintf(fp, "\t++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
-//	fprintf(fp, "\t--ampliclust <sampliclust>\n\t\tDrop reads aligning to "
-//		"low abundance haplotypes identified by amplicon clusterer "
-//				"executable <sampliclust> (Default: no).\n");
+//	fprintf(fp, "\t++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
+//	fprintf(fp, "\t--ampliclust <sampliclust>\n\t\t"
+//		"Drop reads aligning to low abundance haplotypes identified\n\t\t"
+//		"by amplicon clusterer executable <sampliclust> (Default: no)\n");
 //	fprintf(fp, "\t\tUses auxiliary files \"%s\" \"%s.fa\", and \"%s.out\" "
 //			"(see --ampliclust_fastq)\n", opt->ac_fastq_file,
 //					opt->ac_outfile, opt->ac_outfile);
 //	fprintf(fp, "\t--ampliclust_fastq <sampliclust_f>\n\t\tName of fastq "
-//		"file where reads written for amplicon clusterer (Default: %s)."
+//		"file where reads written for amplicon clusterer (Default: %s)"
 //						"\n", opt->ac_fastq_file);
 //	fprintf(fp, "\t--write-fastq\n\t\tJust write fastq file (Default: "
-//		"%s).\n", opt->write_fastq_and_quit ? "yes" : "no");
-//	fprintf(fp, "\t\t\tSee --ampliclust_fastq to name the file.\n");
+//		"%s)\n", opt->write_fastq_and_quit ? "yes" : "no");
+//	fprintf(fp, "\t\t\tSee --ampliclust_fastq to name the file\n");
 //	fprintf(fp, "\t--ampliclust_output <sampliclust_output>\n\t\tName of "
 //			"amplicon clusterer output files (Default: %s.fa and "
-//				"%s.out).\n", opt->ac_outfile, opt->ac_outfile);
+//				"%s.out)\n", opt->ac_outfile, opt->ac_outfile);
 //	fprintf(fp, "\t--ampliclust_low_bound <fampliclust_lb>\n\t\t"
-//		"amplicon clusterer lower bound (-lb option to amplici)."
+//		"amplicon clusterer lower bound (-lb option to amplici)"
 //					" (Default: %f)\n", opt->ac_low_bound);
-	fprintf(fp, "\t+++++++++++++++++++++++++++++++++++++++++++\n");
+	fprintf(fp, "\t++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
 	fprintf(fp, "\tScreening reads, coverage checks:  optional\n");
-	fprintf(fp, "\t+++++++++++++++++++++++++++++++++++++++++++\n");
-	fprintf(fp, "\t--equal\n\t\tEqual homologous coverage test. (Default: %s)\n", opt->equal_homolog_coverage_test ? "yes" : "no");
-	fprintf(fp, "\t--expected_errors <dbl>\n\t\tDiscard reads with more "
-		"than <dbl> expected errors (Default: %f).\n", opt->max_eerr);
-	fprintf(fp, "\t--indel <i>\n\t\tDrop reads with alignments containing "
-		"more than <i> indels (Default: %u)\n", opt->drop_indel);
-	fprintf(fp, "\t--loglik <l>\n\t\tDrop reads with log likelihood less "
-		"than <l> (Default: %f)\n", opt->min_log_likelihood);
-	fprintf(fp, "\t--biallelic FLOAT\n"
-		"\t\tSkip site if third allele >100*FLOAT%% of minimum subgenomic coverage (Default: %.1f).\n", opt->biallelic_screen);
-	fprintf(fp, "\t--min <dbl>\n\t\tDrop reads shorter than <dbl> (Default:"
-		" %u)\n", opt->min_length);
-	fprintf(fp, "\t--max <dbl>\n\t\tDrop reads longer than <dbl> (Default: "
-		"%u)\n", opt->max_length);
-	fprintf(fp, "\t--secondary\n\t\tDrop secondary alignments (Default: "
-		"%s)\n", opt->drop_secondary ? "yes" : "no");
-	fprintf(fp, "\t--coverage <c>\n\t\tTuning parameter for penalty (Default: %.1f).\n", opt->weight_penalty);
+	fprintf(fp, "\t++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
+	fprintf(fp, "\t--equal\n\t\t"
+		"Equal homologous coverage test on heterozygous calls (Default: %s)\n",
+			 opt->equal_homolog_coverage_test ? "yes" : "no");
+	fprintf(fp, "\t--expected_errors FLOAT\n\t\t"
+		"Discard reads with >FLOAT expected errors (Default: ");
+	if (!isfinite(opt->max_eerr))
+		fprintf(fp, "no)\n");
+	else
+		fprintf(fp, "%f)\n", opt->max_eerr);
+	fprintf(fp, "\t--indel INT\n\t\t"
+		"Drop reads aligned with >INT indels (Default: ");
+	if (opt->drop_indel == UINT_MAX)
+		fprintf(fp, "no)\n");
+	else
+		fprintf(fp, "%u)\n", opt->drop_indel);
+	fprintf(fp, "\t--loglik FLOAT\n\t\t"
+		"Drop reads with log likelihood <FLOAT (Default: ");
+	if (!isfinite(opt->min_log_likelihood))
+		fprintf(fp, "no)\n");
+	else
+		fprintf(fp, "%f)\n", opt->min_log_likelihood);
+	fprintf(fp, "\t--biallelic FLOAT\n\t\t"
+		"Skip locus if third allele >100*FLOAT%% of minimum subgenomic\n\t\t"
+		"coverage (Default: %.1f)\n", opt->biallelic_screen);
+	fprintf(fp, "\t--min INT\n\t\t"
+		"Drop reads shorter than INT (Default: %u)\n", opt->min_length);
+	fprintf(fp, "\t--max INT\n\t\t"
+		"Drop reads longer than INT (Default: %u)\n", opt->max_length);
+	fprintf(fp, "\t--secondary\n\t\t"
+		"Drop secondary alignments (Default: %s)\n",
+				opt->drop_secondary ? "yes" : "no");
 	/* hide legacy CI
-	fprintf(fp, "\t--eq\n\t\tPost-hoc test of equal "
-		"coverage of homologous chromosomes. (Default: %s)\n",
-		opt->posthoc_coverage_test ? "no" : "yes");*/
-	fprintf(fp, "\t--soft-clipped <s>\n\t\tDrop reads where either "
-		"alignment is clipped by <s> or more nucleotides (Default: %du\n",
-		opt->drop_soft_clipped);
-	fprintf(fp, "\t--unmapped\n\t\tDrop reads unmapped in either "
-		"alignment (Default: %s)\n", opt->drop_unmapped ? "yes" : "no");
-	fprintf(fp, "\t+++++++++++++++++++++++++++++++\n");
+	fprintf(fp, "\t--eq\n\t\t"
+		"Post-hoc test of equal coverage of homologous chromosomes "
+		"(Default: %s)\n", opt->posthoc_coverage_test ? "no" : "yes");*/
+	fprintf(fp, "\t--soft-clipped INT\n\t\t"
+		"Drop reads if >=1 alignment clipped by >=INT bases "
+							"(Default: ");
+	if (opt->drop_soft_clipped == UINT_MAX)
+		fprintf(fp, "no)\n");
+	else
+		fprintf(fp, "%u)\n", opt->drop_soft_clipped);
+	fprintf(fp, "\t--unmapped\n\t\t"
+		"Drop reads unmapped in either alignment (Default: %s)\n",
+				 opt->drop_unmapped ? "yes" : "no");
+	fprintf(fp, "\t++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
 	fprintf(fp, "\tEstimation/Inference:  optional\n");
-	fprintf(fp, "\t+++++++++++++++++++++++++++++++\n");
+	fprintf(fp, "\t++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
 //	fprintf(fp, "\t--sample <nsamp>\n\t\tNumber of Monte Carlo samples "
 //		"(Default: %u)\n", opt->n_sample);
-	fprintf(fp, "\t--min_subgenomic_coverage <c>\n\t\tAbort if subgenomic "
-				"coverage drops below <c> (Default: %.1f).\n",
-						opt->min_expected_coverage);
+	fprintf(fp, "\t--min_subgenomic_coverage FLOAT\n\t\t"
+		"Skip locus if expected subgenomic coverage <FLOAT "
+		"(Default: %.1f)\n", opt->min_expected_coverage);
 } /* fprint_usage */

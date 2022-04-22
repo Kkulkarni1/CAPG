@@ -39,7 +39,6 @@ struct _options {
 					 */
 	unsigned int min_length;	/*<! drop reads shorter than this */
 	unsigned int max_length;	/*<! drop reads longer than this */
-	double weight_penalty;		/*<! drop reads whose coverage */
 	double biallelic_screen;	/*<! drop sites w/ >2 alleles */
 	double min_expected_coverage;	/*<! abort if subgenome coverage < this */
 	double min_genotype_post_prob;	/*<! min. posterior probability to call heterozygote */

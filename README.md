@@ -77,7 +77,10 @@ Users can give prefix of the extracted regions using `-j` option.
 
 # Output <a name="output" />
 
-The genotyping output for each subgenome are stored in [VCF files](https://samtools.github.io/hts-specs/VCFv4.2.pdf).
+The genotyping output for each subgenome are stored in [VCF files](https://samtools.github.io/hts-specs/VCFv4.2.pdf), one per subgenome, if the `--vcf_files` command-line option is used.
+In addition, the program will extract the target regions into FASTA files, by default called `extracted0.fsa` and `extracted1.fsa`, though you can change the prefix with the `-j` command-line option.
+You will likely want to delete these files after genotyping is complete.
+The command also currently produces //a lot// of output to `stderr` that you may wish to capture and examine.
 
 
 # Command-Line Options <a name = "options" />
@@ -89,11 +92,9 @@ Please run `./capg_wgs -h` for detailed information about all available options.
 
 All the files used and created in this tutorial are in the `data` folder. 
 In this example we will genotype positions 1 to 5000 of both subgenomes assuming they are homoeologous.
-We specify the filename prefix where the selected regions will be output via `-j` (the actual files will be called `prefix0.fsa` and `prefix1.fsa`); you will likely want to delete these files
-after the run completes.
 Finally, we store the output in VCF files, whose names are provided via the `--vcf_files` option.
 
-The command line for genotyping is:
+From the `script_main/wgs` directory, the command line for genotyping is:
 
 ```
 ./capg_wgs --ref_names Genome_A:0-5000 Genome_B:0-5000 --sam_files ../../data/aln0A.sam ../../data/aln0B.sam --fsa_files ../../data/refA.fa ../../data/refB.fa --geno ../../data/ref.sam -equal -0 --vcf_files ../../data/A.vcf ../../data/B.vcf

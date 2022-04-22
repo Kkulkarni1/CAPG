@@ -97,14 +97,14 @@ Finally, we store the output in VCF files, whose names are provided via the `--v
 From the `script_main/wgs` directory, the command line for genotyping is:
 
 ```
-./capg_wgs --ref_names Genome_A:0-5000 Genome_B:0-5000 --sam_files ../../data/aln0A.sam ../../data/aln0B.sam --fsa_files ../../data/refA.fa ../../data/refB.fa --geno ../../data/ref.sam -equal --vcf_files ../../data/A.vcf ../../data/B.vcf
+./capg_wgs --ref_names Genome_A:1-5000 Genome_B:1-5000 --sam_files ../../data/aln0A.sam ../../data/aln0B.sam --fsa_files ../../data/refA.fa ../../data/refB.fa --geno ../../data/ref.sam -equal --vcf_files ../../data/A.vcf ../../data/B.vcf
 ```
 
 The positions with no coverage in the first genome will not be outputed.
 
 # How to Cite <a name = "cite" />
 
-- This work is under review.  Please see [arxiv](url to be added).
+- This work is under review.  Please see [bioarxiv](https://biorxiv.org/cgi/content/short/2022.04.21.488948v1).
 
 # Contact <a name = "contact" />
 

@@ -121,11 +121,13 @@ int make_targets_info(options_rf *opt, ref_info **ref_in,
 				"subgenomic alignments!"));
 		rfi->name_B = malloc(idx_B + 1);
 		strncpy(rfi->name_B, se->name, idx_B);
-		rfi->name_B[idx_B] = '\0';
-		if (opt->legacy_region_specification)			/* command-line provides 0-based, inclusive */
-			rfi->start_B = atoi(&se->name[++idx_B]);	/* 0-based, inclusive */
+		rfi->name_B[idx_B++] = '\0';
+		if (se->name[idx_B] == '0')	/* assume number starting with 0 is exactly 0 */
+			rfi->start_B = 0;
+		else if (opt->legacy_region_specification)		/* command-line provides 0-based, inclusive */
+			rfi->start_B = atoi(&se->name[idx_B]);		/* 0-based, inclusive */
 		else							/* command-line provides 1-based, incclusive */
-			rfi->start_B = atoi(&se->name[++idx_B]) - 1;	/* 0-based, inclusive */
+			rfi->start_B = atoi(&se->name[idx_B]) - 1;	/* 0-based, inclusive */
 		while (idx_B < strlen(se->name) && se->name[idx_B] != opt->delim_len)
 			++idx_B;
 		if (++idx_B >= strlen(se->name))
@@ -148,11 +150,13 @@ int make_targets_info(options_rf *opt, ref_info **ref_in,
 				"subgenomic alignments!"));
 		rfi->name_A = malloc(idx_A + 1);
 		strncpy(rfi->name_A, rname, idx_A);
-		rfi->name_A[idx_A] = '\0';
-		if (opt->legacy_region_specification)			/* command-line provides 0-based, inclusive */
-			rfi->start_A = atoi(&rname[++idx_A]);		/* 0-based, inclusive */
+		rfi->name_A[idx_A++] = '\0';
+		if (rname[idx_A] == '0')
+			rfi->start_A = 0;
+		else if (opt->legacy_region_specification)		/* command-line provides 0-based, inclusive */
+			rfi->start_A = atoi(&rname[idx_A]);		/* 0-based, inclusive */
 		else							/* command-line provides 1-based, inclusive */
-			rfi->start_A = atoi(&rname[++idx_A]) - 1;	/* 0-based, inclusive */
+			rfi->start_A = atoi(&rname[idx_A]) - 1;	/* 0-based, inclusive */
 		while (idx_A < strlen(rname) && rname[idx_A] != opt->delim_len)
 			++idx_A;
 		if (++idx_A >= strlen(rname))
@@ -222,6 +226,7 @@ int pickreads(ref_info *rfi, sam **sds, char const **csome_names)
 			rname = sds[j]->ref_names[se->ref];
 //fprintf(stderr, "se->ref = %u\n", se->ref);
 //fprintf(stderr, "rname = %s\n", sds[j]->ref_names[se->ref]);
+//fprintf(stderr, "csome_names = %s\n", csome_names[j]);
 
 			/* skip reads not mapping to target */
 			if (strcmp(rname, csome_names[j])) {

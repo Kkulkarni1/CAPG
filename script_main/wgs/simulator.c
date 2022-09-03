@@ -650,8 +650,9 @@ void fprint_usage(FILE *fp, const char *cmdname, void *obj) {
 	fprintf(fp, "\t-r <sam> \n\t\tSAM file of aligning B genome to A\n");
 	fprintf(fp, "\t-f <rf_fsa> \n\t\tSpecify fasta file name for simulated two genomes\n");
 	fprintf(fp, "\t-o <outfile> \n\t\tSpecify out file names(Default: %s)\n", opt->out_file);
-	fprintf(fp, "\t-j <homo_rate>\n\t\tSpecify homologous rate\n");
-	fprintf(fp, "\t-g <heter_rate>\n\t\tSpecify heterzgous rate\n");
+	fprintf(fp, "\t-j <homo_rate>\n\t\tSpecify homoeologous rate\n");
+	fprintf(fp, "\t-g <heter_rate>\n\t\tSpecify heterozygous rate\n");
+	fprintf(fp, "\t-p <mm_rate>\n\t\tSpecify mismatch rate in reference A relative to true subgenome A\n");
 	fprintf(fp, "\t-a <alpha>\n\t\tSpecify the shape parameter in beta distribution\n");
 	fprintf(fp, "\t-b <beta>\n\t\tSpecify the rate parameter in beta distribution\n");
 	fprintf(fp, "\t-s <seed>\n\t\tRandom number generator seed\n");

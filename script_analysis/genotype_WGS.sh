@@ -1,19 +1,26 @@
-#!/bin/bash
+#!/usr/bin/bash
+# @file genotype_WGS.sh
+# @author R. Kulkarni
+#
+# Purpose: run CAPG on sample peanut target
+#
+# Requires: compiled capg_wgs and various files in data directory, including several stub files, pointing to big data files elsewhere
 
 TEST_ONLY=0
-EXE=roshan
-NCPU=7
-TARGET_FILE=/path/targets.txt
-CMD=/path/ksd-roshan_wgs/roshan
-GENOME_FILE=/path/combine.sam
-FSA_FILES="/path/tet_A.fa /path/tet_B.fa"
-SAMA_DIR=/path/subset_sam_A
-SAMB_DIR=/path/subset_sam_B
-OUTDIR=/path/err_files
-VCFA=/path/indv_vcf_A
-VCFB=/path/indv_vcf_B
-INFOA=/path/info_A
-INFOB=/path/info_B
+NCPU=7						# number of CPUs to use
+NTARGET=10					# up to 1000 targets
+CAPG_ROOT=.					# path to repository
+TARGET_FILE=${CAPG_ROOT}/data/targets.txt	# list of target regions to genotype
+CMD=${CAPG_ROOT}/script_main/wgs/release/capg_wgs	# CAPG executable
+GENOME_FILE=${CAPG_ROOT}/data/peanut_ref.sam	# alignments of homoeologous targets
+FSA_FILES="${CAPG_ROOT}/data/tet_A.fa ${CAPG_ROOT}/data/tet_B.fa"
+						# subgenomic references NOT ON GITHUB
+SAM_DIR=${CAPG_ROOT}/data/sam			# input directory for sam files
+ERR_DIR=${CAPG_ROOT}/data/err			# output directory for stderr
+VCF_DIR=${CAPG_ROOT}/data/vcf			# output directory for vcf files
+EXTRACTED_DIR=${CAPG_ROOT}/data/extracted	# output directory for extracted target references
+
+EXE=${CMD##*/}
 
 function wait_on {
         NUM=`pgrep -c $EXE`
@@ -25,27 +32,46 @@ function wait_on {
         done
 }
 
-for GENOTYPE in SRR4124062 SRR4124066 SRR4124068 SRR4124074 SRR4124078 SRR8361734 SRR8361735 SRR8361736 SRR8361737 SRR8361738 SRR8736998 SRR8737008 SRR8737061 SRR8737062;
+if [ ! -e $ERR_DIR/${GENOTYPE} ]
+then
+	echo "mkdir --parents $ERR_DIR"
+	if [ $TEST_ONLY -ge 1 ]
+	then
+		mkdir --parents $ERR_DIR
+	fi
+fi
+if [ ! -e $VCF_DIR ]
+then
+	echo "mkdir --parents $VCF_DIR"
+	if [ $TEST_ONLY -ge 1 ]
+	then
+		mkdir --parents $VCF_DIR
+	fi
+fi
+if [ ! -e $EXTRACTED_DIR ]
+then
+	echo "mkdir --parents $EXTRACTED_DIR"
+	if [ $TEST_ONLY -ge 1 ]
+	then
+		mkdir --parents $EXTRACTED_DIR
+	fi
+fi
+
+for GENOTYPE in SRR4124062	# this demo is for just one accession
+# SRR4124066 SRR4124068 SRR4124074 SRR4124078 SRR8361734 SRR8361735 SRR8361736 SRR8361737 SRR8361738 SRR8736998 SRR8737008 SRR8737061 SRR8737062;
 do
-	for TARGET in `seq 1 1000`;
+	for TARGET in `seq 1 $NTARGET`;
 	do
 		REF_NAMES=`grep "^\$TARGET\b" $TARGET_FILE | awk '{print \$2, \$3}'`
-		RUN_THIS="$CMD --geno $GENOME_FILE --fsa_files $FSA_FILES --sam_files $SAMA_DIR/${GENOTYPE}_A.subset.sam $SAMB_DIR/${GENOTYPE}_B.subset.sam --ref_names $REF_NAMES --j extracted.fsa --vcf_files $VCFA/${GENOTYPE}_${TARGET}-A.vcf $VCFB/${GENOTYPE}_${TARGET}-B.vcf --o $INFOA/${GENOTYPE}-A.info.txt $INFOB/${GENOTYPE}-B.info.txt --name ${GENOTYPE} --soft-clipped 5 --po"
+
+		RUN_THIS="$CMD --geno $GENOME_FILE --fsa_files $FSA_FILES --sam_files $SAM_DIR/${GENOTYPE}_A.subset.sam $SAM_DIR/${GENOTYPE}_B.subset.sam --ref_names $REF_NAMES --j $EXTRACTED_DIR/extracted_${GENOTYPE}_${TARGET}.fsa --name ${GENOTYPE} --equal -0 --vcf_files $VCF_DIR/${GENOTYPE}_${TARGET}-A.vcf $VCF_DIR/${GENOTYPE}_${TARGET}-B.vcf"
 		if [ $TEST_ONLY -ge 1 ]
 		then
-			if [ ! -e $OUTDIR/${GENOTYPE} ]
-			then
-				echo "mkdir --parents $OUTDIR/${GENOTYPE}/"
-			fi
-			echo "$RUN_THIS 2> $OUTDIR/${GENOTYPE}/${GENOTYPE}_${TARGET}.err"
+			echo "$RUN_THIS 2> $ERR_DIR/${GENOTYPE}_${TARGET}.err"
 		else
-			if [ ! -e $OUTDIR/${GENOTYPE} ]
-			then
-				mkdir --parents $OUTDIR/${GENOTYPE}/
-			fi
-			echo "$RUN_THIS 2> $OUTDIR/${GENOTYPE}/${GENOTYPE}_${TARGET}.err"
+			echo "$RUN_THIS 2> $ERR_DIR/${GENOTYPE}_${TARGET}.err"
 			wait_on
-			$RUN_THIS 2> $OUTDIR/${GENOTYPE}/${GENOTYPE}_${TARGET}.err &
+			$RUN_THIS 2> $ERR_DIR/${GENOTYPE}_${TARGET}.err &
 		fi
 	done
-done	 
+done

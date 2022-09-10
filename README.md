@@ -17,14 +17,16 @@ The main genotyper is written in C as a standalone executable.
 
 # Prerequisites <a name = "prerequisites" />
 
-The genotyper ```capg_wgs``` requires the [C compiler from the GNU Compile Collection (GCC)](https://gcc.gnu.org/), [CMake](https://cmake.org/), and [Samtools](https://www.htslib.org/download/) executable installed on your system.
+The genotyper ```capg_wgs``` requires the [C compiler from the GNU Compiler Collection (GCC)](https://gcc.gnu.org/), [CMake](https://cmake.org/), and [Samtools](https://www.htslib.org/download/) executable installed on your system.
 
 There is also a data simulator ```capg_sim``` available.
-It additionally requires the [R Standalone Math Library](https://cran.r-project.org/doc/manuals/r-release/R-admin.html#The-standalone-Rmath-library).  Often, the Rmath library (libRmath.a or libRmath.so for Linux or libRmath.dylib for MacOS) will be installed with R, but not always.  Here are some other locations for the library.
+It additionally requires the [R Standalone Math Library](https://cran.r-project.org/doc/manuals/r-release/R-admin.html#The-standalone-Rmath-library).  Often, the Rmath library (```libRmath.a``` or ```libRmath.so``` for Linux or ```libRmath.dylib``` for MacOS) will be installed with R, but not always.  Here are some other locations for the library.
 
 - r-mathlib on [Ubuntu](https://ubuntu.com/) and [Debian](https://www.debian.org/)
 - libRmath on [Fedora](https://ubuntu.com/), [CentOS](https://centos.org/), [Mageia](https://www.mageia.org/en/), and [Mandriva](https://www.openmandriva.org/)
 - Or if all else fails, you can install the Rmath standalone library from the repository [https://github.com/statslabs/rmath](https://github.com/statslabs/rmath)
+
+If RMathLib is not installed on your system, everything should be fine except ```capg_sim``` will not be compiled.
 
 # Installation <a name = "installation" />
 
@@ -58,9 +60,9 @@ The software requires multiple input files.
 
 3. SAM file containing the alignments of selected target regions in each subgenome to each other.  Pass it in via the ```--geno``` command-line option.
 
-It also requires several command-line options.
+It also requires one command-line option.
 
-1. You must name the target regions to genotype, including the chromosome name and the start and end positions relative to the whole chromosome.
+You must name the target regions to genotype, including the chromosome name and the start and end positions relative to the whole chromosome.
 For example, ```chr1:1-10``` means you want to genotype from position 1 to 10 (1 based) in chromosome 1. Use ':' to seperate chromosome name and region index. Use '-' to seperate start and end positions.
 Pass these in by the ```--ref_names``` command-line option.
 
@@ -71,14 +73,12 @@ For example, the following command will output a SAM file called ```ref.sam```.
 nucmer --sam-long=ref --mum target_A.fa target_B.fa
 ```
 
-2. We also subset the targeted regions from both reference whole genomes using SAMtools.
-Users can give prefix of the extracted regions using `-j` option.
-
 
 # Output <a name="output" />
 
 The genotyping output for each subgenome are stored in [VCF files](https://samtools.github.io/hts-specs/VCFv4.2.pdf), one per subgenome, if the `--vcf_files` command-line option is used.
-In addition, the program will extract the target regions into FASTA files, by default called `extracted0.fsa` and `extracted1.fsa`, though you can change the prefix with the `-j` command-line option.
+The name used to identify the current individual in the VCF file output can be provided with the `--name` option.
+In addition, the program will extract the target regions into FASTA files, by default called `extracted0.fsa` and `extracted1.fsa`, though you can change the prefix `extracted` with the `-j` command-line option.
 You will likely want to delete these files after genotyping is complete.
 The command also currently produces //a lot// of output to `stderr` that you may wish to capture and examine.
 
@@ -110,7 +110,7 @@ The positions with no coverage in the first genome will not be outputed.
 
 If you have any problems with this software, please contact:
 
-Roshan Kulkarni (roshank@iastate.edu)
+Roshan Kulkarni (roshank@iastate.edu) or Karin S. Dorman (kdorman@iastate.edu)
 
 # Amplicon Version <a name = "amplicon" />
 

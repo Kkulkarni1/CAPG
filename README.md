@@ -79,7 +79,7 @@ nucmer --sam-long=ref --mum target_A.fa target_B.fa
 The genotyping output for each subgenome are stored in [VCF files](https://samtools.github.io/hts-specs/VCFv4.2.pdf), one per subgenome, if the `--vcf_files` command-line option is used.
 The name used to identify the current individual in the VCF file output can be provided with the `--name` option.
 In addition, the program will extract the target regions into FASTA files, by default called `extracted0.fsa` and `extracted1.fsa`, though you can change the prefix `extracted` with the `-j` command-line option.
-You will likely want to delete these files after genotyping is complete.
+These files are currently deleted unless the program terminates unexpectedly, so you can place these in a temporary directory.
 The command also currently produces //a lot// of output to `stderr` that you may wish to capture and examine.
 
 

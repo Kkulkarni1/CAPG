@@ -9,17 +9,17 @@ All commands are run from the top directory of the github repository.
 
 	- Download the [Tifrunner assembly](https://api.ncbi.nlm.nih.gov/datasets/v1/genome/accession/GCF_003086295.2/download?filename=GCF_003086295.2.zip) and overwrite the github stubs for the subgenomic reference sequences:
 	```
-wget https://api.ncbi.nlm.nih.gov/datasets/v1/genome/accession/GCF_003086295.1/download?filename=GCF_003086295.1.zip GCF_003086295.1.zip
-cat ncbi_dataset/data/GCF_003086295.2/chrArahy.0[1-9].fna ncbi_dataset/data/GCF_003086295.2/chrArahy.10.fna | awk -f script_analysis/chg_names.awk > data/peanut/tet_A.fa	# overwrite github stub
-cat ncbi_dataset/data/GCF_003086295.2/chrArahy.1[1-9].fna ncbi_dataset/data/GCF_003086295.2/chrArahy.20.fna | awk -f script_analysis/chg_names.awk > data/peanut/tet_B.fa	# overwrite github stub
+	wget https://api.ncbi.nlm.nih.gov/datasets/v1/genome/accession/GCF_003086295.1/download?filename=GCF_003086295.1.zip GCF_003086295.1.zip
+	cat ncbi_dataset/data/GCF_003086295.2/chrArahy.0[1-9].fna ncbi_dataset/data/GCF_003086295.2/chrArahy.10.fna | awk -f script_analysis/chg_names.awk > data/peanut/tet_A.fa	# overwrite github stub
+	cat ncbi_dataset/data/GCF_003086295.2/chrArahy.1[1-9].fna ncbi_dataset/data/GCF_003086295.2/chrArahy.20.fna | awk -f script_analysis/chg_names.awk > data/peanut/tet_B.fa	# overwrite github stub
 	```
 	- Download the target-aligned SRR4124062 reads from [OSF storage](https://osf.io/uezgp/files/osfstorage):
-```
-wget https://osf.io/download/631d4476db9397378e11f644/ data/peanut/sam/SRR4124062_A.subset.bam
-wget https://osf.io/download/631d44929a7d513523903ae0/ data/peanut/sam/SRR4124062_B.subset.bam
-samtools view -h data/peanut/sam/SRR4124062_A.subset.bam data/peanut/sam/SRR4124062_A.subset.sam	# overwrite github stub
-samtools view -h data/peanut/sam/SRR4124062_B.subset.bam data/peanut/sam/SRR4124062_B.subset.sam	# overwrite github stub
-```
+	```
+	wget https://osf.io/download/631d4476db9397378e11f644/ data/peanut/sam/SRR4124062_A.subset.bam
+	wget https://osf.io/download/631d44929a7d513523903ae0/ data/peanut/sam/SRR4124062_B.subset.bam
+	samtools view -h data/peanut/sam/SRR4124062_A.subset.bam data/peanut/sam/SRR4124062_A.subset.sam	# overwrite github stub
+	samtools view -h data/peanut/sam/SRR4124062_B.subset.bam data/peanut/sam/SRR4124062_B.subset.sam	# overwrite github stub
+	```
 - Now you are ready to run the genotyping pipeline.
 There is nothing pretty about this pipeline, but it gets the job done for now.
 ```

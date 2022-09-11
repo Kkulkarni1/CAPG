@@ -12,6 +12,7 @@ wget https://api.ncbi.nlm.nih.gov/datasets/v1/genome/accession/GCF_003086295.1/d
 cat ncbi_dataset/data/GCF_003086295.1/chrArahy.0[1-9].fna ncbi_dataset/data/GCF_003086295.1/chrArahy.10.fna | awk -f script_analysis/chg_names.awk > data/peanut/tet_A.fa	# overwrite github stub
 cat ncbi_dataset/data/GCF_003086295.1/chrArahy.1[1-9].fna ncbi_dataset/data/GCF_003086295.1/chrArahy.20.fna | awk -f script_analysis/chg_names.awk > data/peanut/tet_B.fa	# overwrite github stub
 ```
+
 	- Download the target-aligned SRR4124062 reads from [OSF storage](https://osf.io/uezgp/files/osfstorage):
 ```
 wget https://osf.io/download/631d4476db9397378e11f644/ data/peanut/sam/SRR4124062_A.subset.bam
@@ -19,6 +20,7 @@ wget https://osf.io/download/631d44929a7d513523903ae0/ data/peanut/sam/SRR412406
 samtools view -h data/peanut/sam/SRR4124062_A.subset.bam data/peanut/sam/SRR4124062_A.subset.sam	# overwrite github stub
 samtools view -h data/peanut/sam/SRR4124062_B.subset.bam data/peanut/sam/SRR4124062_B.subset.sam	# overwrite github stub
 ```
+
 - Now you are ready to run the genotyping pipeline.
 There is nothing pretty about this pipeline, but it gets the job done for now.
 ```
@@ -27,5 +29,6 @@ script_analysis/err2info.sh		# convert captured stderr output of capg_wgs to "in
 script_analysis/combine_infos.sh	# combine "info" files
 script_analysis/get_metrics.R		# compute metrics from "info" files
 ```
+
 - The metrics for heterozygote genotyping are in the file called `results/peanut/CAPG_PL_peanut_het.txt`.
 The metrics for allelic (homologous) and homoeologous SNP calling are in the file called `results/peanut/CAPG_PL_peanut_ho.txt`.

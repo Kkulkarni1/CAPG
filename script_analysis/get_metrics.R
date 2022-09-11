@@ -10,9 +10,9 @@
 library(dplyr)
 
 capg.home <- '.'
-info.dir <- paste(capg.home, '/data/info', sep='')	# directory with "info" files
-write.outfiles <- T					# write the following output files
-results.dir <- 'results'				# where to put the final results
+info.dir <- paste(capg.home, '/data/peanut/info', sep='')	# directory with "info" files
+write.outfiles <- T						# write the following output files
+results.dir <- 'results/peanut'					# where to put the final results
 het.outfile = paste(results.dir, "/CAPG_PL_peanut_het.txt", sep='')
 							# output file for heterozygous genotype calling
 ho.outfile = paste(results.dir, "/CAPG_PL_peanut_ho.txt", sep='')

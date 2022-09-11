@@ -7,18 +7,18 @@
 # Requires: compiled capg_wgs and various files in data directory, including several stub files, pointing to big data files elsewhere
 
 TEST_ONLY=0
-NCPU=7						# number of CPUs to use
-NTARGET=10					# up to 1000 targets
-CAPG_ROOT=.					# path to repository
-TARGET_FILE=${CAPG_ROOT}/data/targets.txt	# list of target regions to genotype
+NCPU=7							# number of CPUs to use
+NTARGET=10						# up to 1000 targets
+CAPG_ROOT=.						# path to repository
+TARGET_FILE=${CAPG_ROOT}/data/peanut/targets.txt	# list of target regions to genotype
 CMD=${CAPG_ROOT}/script_main/wgs/release/capg_wgs	# CAPG executable
-GENOME_FILE=${CAPG_ROOT}/data/peanut_ref.sam	# alignments of homoeologous targets
-FSA_FILES="${CAPG_ROOT}/data/tet_A.fa ${CAPG_ROOT}/data/tet_B.fa"
-						# subgenomic references NOT ON GITHUB
-SAM_DIR=${CAPG_ROOT}/data/sam			# input directory for sam files
-ERR_DIR=${CAPG_ROOT}/data/err			# output directory for stderr
-VCF_DIR=${CAPG_ROOT}/data/vcf			# output directory for vcf files
-EXTRACTED_DIR=${CAPG_ROOT}/data/extracted	# output directory for extracted target references
+GENOME_FILE=${CAPG_ROOT}/data/peanut/peanut_ref.sam	# alignments of homoeologous targets
+FSA_FILES="${CAPG_ROOT}/data/peanut/tet_A.fa ${CAPG_ROOT}/data/peanut/tet_B.fa"
+							# subgenomic references NOT ON GITHUB
+SAM_DIR=${CAPG_ROOT}/data/peanut/sam			# input directory for sam files
+ERR_DIR=${CAPG_ROOT}/data/peanut/err			# output directory for stderr
+VCF_DIR=${CAPG_ROOT}/data/peanut/vcf			# output directory for vcf files
+EXTRACTED_DIR=${CAPG_ROOT}/data/peanut/extracted	# output directory for extracted target references
 
 EXE=${CMD##*/}
 

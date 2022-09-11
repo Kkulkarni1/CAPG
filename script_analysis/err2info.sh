@@ -7,8 +7,8 @@
 
 TEST_ONLY=0
 CAPG_HOME=.
-INDIR=${CAPG_HOME}/data/err
-OUTDIR=${CAPG_HOME}/data/info
+INDIR=${CAPG_HOME}/data/peanut/err
+OUTDIR=${CAPG_HOME}/data/peanut/info
 CMD=${CAPG_HOME}/script_analysis/err2info.py
 
 if [ ! -d $OUTDIR ]; then

@@ -17,6 +17,8 @@
 int main(int argc, const char *argv[]) {
 	int err = NO_ERROR;
 	simu_options opt;
+	simu_dat *dat = NULL;
+
 	make_simu_opt(&opt);
 	if (parse_opt(&opt, argc, argv))
 		exit(mmessage(ERROR_MSG, INVALID_CMDLINE, ""));
@@ -43,11 +45,10 @@ int main(int argc, const char *argv[]) {
 	if ((err = read_fastq(opt.extracted_rf, &fds, &fop)))
 		exit(mmessage(ERROR_MSG, INTERNAL_ERROR, "Reading '%s' "
 			      "failed with error '%s' (%d).\n",
-			      opt.extracted_rf, fastq_error_message(err),
-			      err));
+			      opt.extracted_rf, fastq_error_message(err), err));
 	opt.len_N = fds->n_max_length;
+
 	/* sample another genome with homologous SNPs */
-	simu_dat *dat = NULL;
 	if (make_data(&dat))
 		exit(mmessage(ERROR_MSG, INTERNAL_ERROR, "Make data error \n"));
 	
@@ -69,7 +70,7 @@ void fprint_fsa(FILE *fp, char_t **data, size_t n, size_t p, char const * const 
 void write_sam(FILE *fp, char_t *B, size_t p, char *name_A, char *name_B) {
 	fprintf(fp, "@SQ	SN:");
 	fprintf(fp, "%s	LN:%lu\n", name_A, p);
-	fprintf(fp, "%s	0	%s	1	255	%luM	*	0	0	\n", name_B, name_A, p);
+	fprintf(fp, "%s\t0\t%s\t1\t255\t%luM\t*\t0\t0\t", name_B, name_A, p);
 	for (size_t j = 0; j < p; ++j)
 		fprintf(fp, "%c", xy_to_char[(int)B[j]]);
 	fprintf(fp, " * \n");
@@ -86,6 +87,7 @@ void make_simu_opt(simu_options *opt)
 {
 	opt->out_sam = NULL;
 	opt->extracted_rf = NULL;
+	opt->sub_ref_b = NULL;
 	opt->fsa_file = NULL;
 	opt->ref_name = NULL;
 	opt->len_N = 0;
@@ -156,10 +158,9 @@ int parse_opt(simu_options *opt, int argc, const char **argv)
 			case 'r':
 				if (i + 1 == argc)
 					goto CMDLINE_ERROR;
-				mmessage(INFO_MSG, NO_ERROR, "Reference names:");
 				opt->out_sam = argv[++i];
-				fprintf(stderr, " %s", opt->out_sam);
-				fprintf(stderr, "\n");
+				mmessage(INFO_MSG, NO_ERROR, "Reference "
+					"alignment: %s\n", opt->out_sam);
 				break;
 			case 's':
 				if (i + 1 == argc)
@@ -172,9 +173,8 @@ int parse_opt(simu_options *opt, int argc, const char **argv)
 				if (i + 1 == argc)
 					goto CMDLINE_ERROR;
 				opt->out_file = argv[++i];
-				mmessage(INFO_MSG, NO_ERROR, "Out fsa file:");
-				fprintf(stderr, " %s", opt->out_file);
-				fprintf(stderr, "\n");
+				mmessage(INFO_MSG, NO_ERROR, "Out fsa file "
+					"base: %s\n", opt->out_file);
 				break;
 			case 'e':
 				if (i + 1 == argc)
@@ -193,7 +193,7 @@ int parse_opt(simu_options *opt, int argc, const char **argv)
 				else
 					opt->mismatch_prob = 0;
 				mmessage(INFO_MSG, NO_ERROR, "Probability of "
-					"mismatch in subgenome A: %f",
+					"mismatch in subgenome A: %f\n",
 							opt->mismatch_prob);
 				break;
 			case 'j':
@@ -264,6 +264,9 @@ CMDLINE_ERROR:
 int load_data(simu_dat *dat, simu_options *opt, fastq_data *fds)
 {
 	unsigned int i, j, m;
+	unsigned int count = 0;
+	char_t complement[3];
+	double r;
 
 	dat->seq_A = malloc(opt->len_N * sizeof(*dat->seq_A));
 	dat->seq_B = malloc(opt->len_N * sizeof(*dat->seq_B));
@@ -276,31 +279,11 @@ int load_data(simu_dat *dat, simu_options *opt, fastq_data *fds)
 	MAKE_2ARRAY(dat->ind, 4, opt->len_N);
 	
 	dat->seq_A = fds->reads;
-	// make seq_B
-	fprintf(stderr, "start simulation\n");
-	for (j = 0; j < opt->len_N; ++j) {
-		char_t complement[3];
-		unsigned int count = 0;
-		double r = rand() / (RAND_MAX + 1.);
 
-		if (r <= opt->homo_rate) {
-			dat->homo_loci[j] = 1;
-			for(i = 0; i < 4; ++i)
-				if (i != dat->seq_A[j])
-					complement[count++] = i;
-			// sample substitution nuc
-			double rn = rand() / (RAND_MAX + 1.);
-			//			fprintf(stderr, "%f ",rn);
-			if (rn <= opt->substitution_rate)
-				dat->seq_B[j] = complement[0];
-			else if (rn <= (opt->substitution_rate + opt->substitution_rate))
-				dat->seq_B[j] = complement[1];
-			else
-				dat->seq_B[j] = complement[2];
-		} else {
-			dat->homo_loci[j] = 0;
-			dat->seq_B[j] = dat->seq_A[j];
-		}
+	fprintf(stderr, "start simulation\n");
+
+	/* simulate errors in subgenome A reference */
+	for (j = 0; j < opt->len_N; ++j) {
 
 		if (!opt->imperfect_ref) {
 			dat->ref_A[j] = dat->seq_A[j];
@@ -328,17 +311,69 @@ int load_data(simu_dat *dat, simu_options *opt, fastq_data *fds)
 			dat->ref_A[j] = dat->seq_A[j];
 		}
 	}
-	fprintf(stderr, "\ngenome B simulated, homo rate %lf, mutated:\n", opt->homo_rate);
+	fprintf(stderr, "reference A simulated, mismatch rate %lf, mutated:\n", opt->mismatch_prob);
+
+	/* read subgenome B reference */
+	if (fds->n_reads == 2) {
+		unsigned int cnt_h = 0;
+
+		dat->seq_B = fds->reads + opt->len_N;
+
+		for (j = 0; j < opt->len_N; ++j) {
+			if (dat->seq_A[j] != dat->seq_B[j]) {
+				dat->homo_loci[j] = 1;
+				++cnt_h;
+			} else {
+				dat->homo_loci[j] = 0;
+			}
+		}
+
+		fprintf(stderr, "genome B read from '%s', observed homoeologous rate %lf, mutated:\n", opt->extracted_rf, (double) cnt_h / opt->len_N);
+
+	/* simulate reference B */
+	} else {
+
+		for (j = 0; j < opt->len_N; ++j) {
+
+			r = rand() / (RAND_MAX + 1.);
+			count = 0;
+
+			if (r <= opt->homo_rate) {
+				dat->homo_loci[j] = 1;
+				for(i = 0; i < 4; ++i)
+					if (i != dat->seq_A[j])
+						complement[count++] = i;
+				// sample substitution nuc
+				double rn = rand() / (RAND_MAX + 1.);
+				//			fprintf(stderr, "%f ",rn);
+				if (rn <= opt->substitution_rate)
+					dat->seq_B[j] = complement[0];
+				else if (rn <= (opt->substitution_rate + opt->substitution_rate))
+					dat->seq_B[j] = complement[1];
+				else
+					dat->seq_B[j] = complement[2];
+			} else {
+				dat->homo_loci[j] = 0;
+				dat->seq_B[j] = dat->seq_A[j];
+			}
+	
+		}
+		fprintf(stderr, "genome B simulated, homoeologous rate %lf, mutated:\n", opt->homo_rate);
+	}
+
+	/* truth to stderr */
 	for (j = 0; j < opt->len_N; ++j) {
 		if (dat->homo_loci[j] == 1)
 			fprintf(stderr, "%d: %d|%d\n", j, dat->seq_A[j], dat->seq_B[j]);
 		if (dat->mm_loci[j])
 			fprintf(stderr, "mm: %d: %d|%d\n", j, dat->seq_A[j], dat->ref_A[j]);
 	}
+
 	// ref A nad B in the same file for HMM method to use
 	FILE *fp = NULL;
 	size_t len = strlen(opt->fsa_file) + 4 + 1;
 	char *fsa_file = malloc(len);
+
 	sprintf(fsa_file, "%s.fsa", opt->fsa_file);
 	if (fsa_file) {
 		fp = fopen(fsa_file, "w");
@@ -348,6 +383,7 @@ int load_data(simu_dat *dat, simu_options *opt, fastq_data *fds)
 	size_t name_len = strlen("Genome_A:0-") + (int)log10(opt->len_N) + 1 + 1;
 	char *name_A = malloc(name_len);
 	char *name_B = malloc(name_len);
+
 	sprintf(name_A, "Genome_A:0-%u", opt->len_N);
 	sprintf(name_B, "Genome_B:0-%u", opt->len_N);
 	if (opt->imperfect_ref)
@@ -387,6 +423,10 @@ int load_data(simu_dat *dat, simu_options *opt, fastq_data *fds)
 		call_bwa(opt, fsaA_file, NULL, NULL, NULL);
 		call_bwa(opt, fsaB_file, NULL, NULL, NULL);
 	}
+
+	if (!opt->num_ind)
+		return NO_ERROR;
+
 	// make heter loci
 	for (j = 0; j < opt->len_N; ++j) {
 		if (dat->homo_loci[j]) {
@@ -452,7 +492,7 @@ int load_data(simu_dat *dat, simu_options *opt, fastq_data *fds)
 			}
 		}
 	}
-	fprintf(stderr, "\nheterzgous sites simulated, heter rate %lf, mutated:\n", opt->heter_rate);
+	fprintf(stderr, "\nallelic SNPs simulated, with rate %lf, mutated:\n", opt->heter_rate);
 	for (j = 0; j < opt->len_N; ++j) {
 		if(dat->heter_loci[j] == 1)
 			fprintf(stderr, "A: %d: %d|%d \n", j, dat->seq_A[j], dat->seq_A2[j]);
@@ -646,10 +686,10 @@ void fprint_usage(FILE *fp, const char *cmdname, void *obj) {
 	fprintf(fp, "\nNAME\n\t%s - Generate simulated individuals\n", &cmdname[start]);
 	fprintf(fp, "\nSYNOPSIS\n\t%s -e <fsa> -f <rf_fsa> -j <homo_rate> -g <heter_rate> -a <alpha> \n -b <beta> -s <seed> -o <output> -n <sample> -r <sam>\t\n", &cmdname[start]);
 	fprintf(fp, "\nOPTIONS\n");
-	fprintf(fp, "\t-e <fsa> \n\t\tSpecify input fasta file for simulation\n");
-	fprintf(fp, "\t-r <sam> \n\t\tSAM file of aligning B genome to A\n");
-	fprintf(fp, "\t-f <rf_fsa> \n\t\tSpecify fasta file name for simulated two genomes\n");
-	fprintf(fp, "\t-o <outfile> \n\t\tSpecify out file names(Default: %s)\n", opt->out_file);
+	fprintf(fp, "\t-e <fsa> \n\t\tSubgenome A (and optionally B) references in FASTA format.\n");
+	fprintf(fp, "\t-r <sam> \n\t\tOutput name of SAM file with alignment of A and B reference.\n");
+	fprintf(fp, "\t-f <rf_fsa> \n\t\tOutput basename of FASTA files for simulated reference genomes\n");
+	fprintf(fp, "\t-o <outfile> \n\t\tOutput filenames of individual genomes (Default: %s)\n", opt->out_file);
 	fprintf(fp, "\t-j <homo_rate>\n\t\tSpecify homoeologous rate\n");
 	fprintf(fp, "\t-g <heter_rate>\n\t\tSpecify heterozygous rate\n");
 	fprintf(fp, "\t-p <mm_rate>\n\t\tSpecify mismatch rate in reference A relative to true subgenome A\n");

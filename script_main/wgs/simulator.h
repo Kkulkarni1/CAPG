@@ -23,7 +23,8 @@ struct _simu_options {
 	const char *fsa_file;		/*<! fsa files (A & B seperately && together) */
 	const char *ref_name;		/*<! random sample ref name */
 	const char *out_sam;		/*<! alignment of A and B in a sam file */
-	const char *extracted_rf;
+	const char *extracted_rf;	/*<! subgenome A reference */
+	const char *sub_ref_b;		/*<! already existing subgenome B reference */
 	char *delim_ref;
 	char *delim_len;
 	unsigned long seed;

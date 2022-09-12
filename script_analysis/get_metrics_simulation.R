@@ -54,7 +54,7 @@ for (mm in mm_rates) {
 		d$PP_hetA <- d$PA.1. - apply(d[, c('PA.0.', 'PA.2.')], 1, max)
 		d$PP_hetB <- d$PB.1. - apply(d[, c('PB.0.', 'PB.2.')], 1, max)
 		if (write.results) {
-			write.table(d[, c('PositionA', 'PositionB', 'Genotype', 'PP_hetA', 'PP_hetB', 'CovA', 'CovB')], file = , row.names = F, sep = "\t", quote = F)
+			write.table(d[, c('PositionA', 'PositionB', 'Genotype', 'PP_hetA', 'PP_hetB', 'CovA', 'CovB')], file = het.file, row.names = F, sep = "\t", quote = F)
 		}
 	}
 	if (do.homoeos) {

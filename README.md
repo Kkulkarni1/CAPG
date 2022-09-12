@@ -102,7 +102,7 @@ From the `src/wgs` directory, the command line for genotyping is:
 
 The positions with no coverage in the first genome will not be outputed.
 
-More detailed tutorials demonstrating real data analysis of peanut data and an extensive simulation, can be found (here)[https://github.com/Kkulkarni1/CAPG/tree/main/script_analysis].
+More detailed tutorials demonstrating real data analysis of peanut data and an extensive simulation, can be found [here](https://github.com/Kkulkarni1/CAPG/tree/main/script_analysis).
 
 # How to Cite <a name = "cite" />
 

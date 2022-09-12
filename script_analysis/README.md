@@ -36,7 +36,7 @@ The metrics for allelic (homologous) and homoeologous SNP calling are in the fil
 In the CAPG manuscript, we simulated data from 50 individuals over seven conditions.
 Here, we demonstrate a simulation with 5 individuals over 12 conditions.
 
-- CAPG pipeline: You must have succeeded in compiling `capg_sim`, which requires the R math library and installed `bwa` and (art_illumina)[https://www.niehs.nih.gov/research/resources/software/biostatistics/art/index.cfm]
+- CAPG pipeline: You must have succeeded in compiling `capg_sim`, which requires the R math library and installed `bwa` and [art_illumina](https://www.niehs.nih.gov/research/resources/software/biostatistics/art/index.cfm)
 ```
 ./script_analysis/simulate_data.sh		# calls capg_sim
 ./script_analysis/capg_genotype_simulation.sh	# calls capg_wgs

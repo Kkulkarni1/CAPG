@@ -43,7 +43,13 @@ Here, we demonstrate a simulation with 5 individuals over 12 conditions.
 ./script_analysis/err2info_simulation.sh	# calls err2info_simulation.py
 ./script_analysis/get_metrics_simulation.R	# computes metrics
 ```
-- GATK pipeline
+VCF files are placed in `data/simulation/homrHRmmMM/covCVG/vcf`, where `HR` is homoeologous rate (0.005 or 0.007), `MM` is subgenome reference mismatch rate (0.000, 0.001, 0.010), CVG is read coverage (5 or 10 per chromosome).
+Computed metrics for every site are in `data/simulation/results/CAPG_PL_HR_CVG_mmMM_het.txt` for heterozygous genotype calls or `data/simulation/results/CAPG_PL_HR_CVG_mmMM_het.txt` for SNP calls (allelic or homoeologous).
+- GATK pipeline: you must have installed `samtools`, `bwa`, and `gatk`.
 ```
-./script_analysis/vcf2info.sh	# calls vcf2info.py
+./script_analysis/simulation_GATK.sh		# creates vcf files
+./script_analysis/vcf2info_simulation.sh	# calls vcf2info.py
+./script_analysis/get_metrics_GATK_simulation.R	# computes metrics
 ```
+VCF files are placed in `data/simulation/homrHRmmMM/covCVG/GATK/vcf` for given `HR`, `MM`, and `CVG` value (see above).
+Computed metrics are in `data/simulation/results/GATK_PL_HR_CVG_mmMM_het.txt` or `data/simulation/results/GATK_PL_HR_CVG_mmMM_hom.txt`.

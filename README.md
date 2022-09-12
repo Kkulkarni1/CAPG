@@ -36,10 +36,10 @@ If RMathLib is not installed on your system, everything should be fine except ``
     git clone https://github.com/Kkulkarni1/CAPG.git
     ```
 
-2. Compile CAPG. The executable is called ```capg_wgs```.  It will appear in the ```CAPG/script_main/wgs``` directory.
+2. Compile CAPG. The executable is called ```capg_wgs```.  It will appear in the ```CAPG/src/wgs``` directory.
 
    ```sh
-   cd CAPG/script_main/wgs
+   cd CAPG/src/wgs
    cmake .
    make
    ```
@@ -94,13 +94,15 @@ All the files used and created in this tutorial are in the `data` folder.
 In this example we will genotype positions 1 to 5000 of both subgenomes assuming they are homoeologous.
 Finally, we store the output in VCF files, whose names are provided via the `--vcf_files` option.
 
-From the `script_main/wgs` directory, the command line for genotyping is:
+From the `src/wgs` directory, the command line for genotyping is:
 
 ```
 ./capg_wgs --ref_names Genome_A:1-5000 Genome_B:1-5000 --sam_files ../../data/aln0A.sam ../../data/aln0B.sam --fsa_files ../../data/refA.fa ../../data/refB.fa --geno ../../data/ref.sam -equal --vcf_files ../../data/A.vcf ../../data/B.vcf
 ```
 
 The positions with no coverage in the first genome will not be outputed.
+
+More detailed tutorials demonstrating real data analysis of peanut data and an extensive simulation, can be found (here)[https://github.com/Kkulkarni1/CAPG/tree/main/script_analysis].
 
 # How to Cite <a name = "cite" />
 
@@ -118,10 +120,10 @@ We also have a similar software for genotyping amplicon sequences, here we brief
 
 ## Installation
 
-Compile CAPG for amplicon. The executable is called ```capg_amp```.  It will appear in the ```CAPG/script_main/amplicon``` directory.
+Compile CAPG for amplicon. The executable is called ```capg_amp```.  It will appear in the ```CAPG/src/amplicon``` directory.
 
    ```sh
-   cd CAPG/script_main/amplicon
+   cd CAPG/src/amplicon
    make capg_amp
    ```
 ## Command-Line Options

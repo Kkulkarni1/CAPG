@@ -1,4 +1,7 @@
 #!/usr/bin/python3
+# @file err2info_simulation.py
+# @author R. Kulkarni
+#
 # Purpose: To get infofiles (processed data files) from intermediate files (err files) genrated by CAPG genotyper
 
 # INPUT: Error files

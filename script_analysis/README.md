@@ -36,10 +36,14 @@ The metrics for allelic (homologous) and homoeologous SNP calling are in the fil
 In the CAPG manuscript, we simulated data from 50 individuals over seven conditions.
 Here, we demonstrate a simulation with 5 individuals over 12 conditions.
 
+- CAPG pipeline
 ```
 ./script_analysis/simulate_data.sh		# calls capg_sim
 ./script_analysis/capg_genotype_simulation.sh	# calls capg_wgs
 ./script_analysis/err2info_simulation.sh	# calls err2info_simulation.py
 ./script_analysis/get_metrics_simulation.R	# computes metrics
 ```
+- GATK pipeline
+```
+./script_analysis/vcf2info.sh	# calls vcf2info.py
 ```

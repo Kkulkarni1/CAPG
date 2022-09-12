@@ -36,7 +36,7 @@ The metrics for allelic (homologous) and homoeologous SNP calling are in the fil
 In the CAPG manuscript, we simulated data from 50 individuals over seven conditions.
 Here, we demonstrate a simulation with 5 individuals over 12 conditions.
 
-- CAPG pipeline
+- CAPG pipeline: You must have succeeded in compiling `capg_sim`, which requires the R math library and installed `bwa` and (art_illumina)[https://www.niehs.nih.gov/research/resources/software/biostatistics/art/index.cfm]
 ```
 ./script_analysis/simulate_data.sh		# calls capg_sim
 ./script_analysis/capg_genotype_simulation.sh	# calls capg_wgs
@@ -45,7 +45,7 @@ Here, we demonstrate a simulation with 5 individuals over 12 conditions.
 ```
 VCF files are placed in `data/simulation/homrHRmmMM/covCVG/vcf`, where `HR` is homoeologous rate (0.005 or 0.007), `MM` is subgenome reference mismatch rate (0.000, 0.001, 0.010), CVG is read coverage (5 or 10 per chromosome).
 Computed metrics for every site are in `data/simulation/results/CAPG_PL_HR_CVG_mmMM_het.txt` for heterozygous genotype calls or `data/simulation/results/CAPG_PL_HR_CVG_mmMM_het.txt` for SNP calls (allelic or homoeologous).
-- GATK pipeline: you must have installed `samtools`, `bwa`, and `gatk`.
+- GATK pipeline: You must have simulated the data using the above CAPG pipeline and installed `samtools`, `bwa`, and `gatk`.
 ```
 ./script_analysis/simulation_GATK.sh		# creates vcf files
 ./script_analysis/vcf2info_simulation.sh	# calls vcf2info.py

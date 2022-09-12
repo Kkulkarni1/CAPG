@@ -1,6 +1,6 @@
 # CAPG - Comprehensive Allopolyploid Genotyper
 
-This software genotypes targeted genomic regions in alleotetraploids using whole genome sequencing (WGS) reads aligned to both reference subgenomes.
+This software genotypes targeted genomic regions in allotetraploids using whole genome sequencing (WGS) reads aligned to both reference subgenomes.
 (For a version that handles targeted amplicons, see [capg_amp](#amplicon).)
 The main genotyper is written in C as a standalone executable.
 

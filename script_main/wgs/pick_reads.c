@@ -56,15 +56,15 @@ int const alignment_state_to_alignment_state[ALIGN_STATES] = {
  * Map CIGAR states to alignment states. See also alignment_state_to_cigar.
  */
 int const cigar_to_alignment_state[CIGAR_NCHAR] = {
-	ALIGN_MATCH, // CIGAR_MMATCH
-	ALIGN_INSERTION, //CIGAR_INSERTION
-	ALIGN_DELETION, //CIGAR_DELETION
-	ALIGN_OUTSIDE, //CIGAR_SKIP
-	ALIGN_SOFT_CLIP, //CIGAR_SOFT_CLIP
-	ALIGN_OUTSIDE, //CIGAR_HARD_CLIP
-	ALIGN_OUTSIDE, //CIGAR_PAD
-	ALIGN_MATCH, //CIGAR_MATCH
-	ALIGN_MATCH //CIGAR_MISMATCH
+	ALIGN_MATCH,		// CIGAR_MMATCH
+	ALIGN_INSERTION,	// CIGAR_INSERTION
+	ALIGN_DELETION, 	// CIGAR_DELETION
+	ALIGN_OUTSIDE,		// CIGAR_SKIP
+	ALIGN_SOFT_CLIP,	// CIGAR_SOFT_CLIP
+	ALIGN_OUTSIDE,		// CIGAR_HARD_CLIP
+	ALIGN_OUTSIDE,		// CIGAR_PAD
+	ALIGN_MATCH,		// CIGAR_MATCH
+	ALIGN_MATCH		// CIGAR_MISMATCH
 };
 
 /**
@@ -77,34 +77,6 @@ unsigned int const alignment_state_to_cigar[ALIGN_STATES] = {
 	CIGAR_SOFT_CLIP,	// ALIGN_SOFT_CLIP
 	CIGAR_HARD_CLIP		// ALIGN_OUTSIDE
 };
-
-/**
- * Map alignment state to alignment state (negative enums used in this file),
- * changing perspective from reference to query or vice versa.
- */
-int const alignment_state_to_alignment_state[ALIGN_STATES] = {
-	ALIGN_MATCH,		// ALIGN_MATCH
-	ALIGN_INSERTION,	// ALIGN_DELETION
-	ALIGN_DELETION,		// ALIGN_INSERTION
-	ALIGN_OUTSIDE,		// ALIGN_SOFT_CLIP
-	ALIGN_OUTSIDE		// ALIGN_OUTSIDE
-};
-
-/**
- * Map cigar ash to alignment state.
- */
-int const cigar_to_alignment_state[CIGAR_NCHAR] = {
-	ALIGN_MATCH,		// CIGAR_MMATCH
-	ALIGN_INSERTION,	// CIGAR_INSERTION
-	ALIGN_DELETION,		// CIGAR_DELETION
-	ALIGN_OUTSIDE,		// CIGAR_SKIP
-	ALIGN_SOFT_CLIP,	// CIGAR_SOFT_CLIP
-	ALIGN_OUTSIDE,		// CIGAR_HARD_CLIP
-	ALIGN_OUTSIDE,		// CIGAR_PAD
-	ALIGN_MATCH,		// CIGAR_MATCH
-	ALIGN_MATCH		// CIGAR_MISMATCH
-};
-
 
 /**
  * Set up default reference options.
@@ -689,8 +661,8 @@ int match_indels(merge_hash *mh, sam **sds, ref_info *rfi)
 		sam_entry *se = &sds[0]->se[me->indices[0][0]];	/* sgA is default alignment */
 		unsigned int rd_idx = 0;
 		unsigned int last_rd_idx = 0;	/* last read index involved in homoeologous alignment */
-		unsigned int last_rf_idx, last_other_rf_idx;		/* last sgA and sgB index involved in sgA (default) alignment */
-		unsigned int last_alt_rf_idx, last_alt_other_rf_idx;	/* last sgA and sgB index involved in sgB (alternate) alignment */
+		unsigned int last_rf_idx=0, last_other_rf_idx=0;		/* last sgA and sgB index involved in sgA (default) alignment */
+		unsigned int last_alt_rf_idx=0, last_alt_other_rf_idx=0;/* last sgA and sgB index involved in sgB (alternate) alignment */
 		unsigned char in_discrepancy = 0;
 		double lla = 0, llb = 0;
 

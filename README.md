@@ -1,6 +1,6 @@
 # CAPG - Comprehensive Allopolyploid Genotyper
 
-This software is implemented for genotyping alleotetraploids' targeted genome regions using screened reads aligned to the whole genome references.
+This software is implemented for genotyping allotetraploids' targeted genome regions using screened reads aligned to the whole genome references.
 It has primarily been designed as a standalone executable.
 Skip to [Installation](#installation) to see how.
 

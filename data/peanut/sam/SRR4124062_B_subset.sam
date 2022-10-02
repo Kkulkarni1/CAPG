@@ -1,0 +1,4 @@
+@HD	VN:1.6	SO:coordinate
+@SQ	SN:Genome_B	LN:5000
+@PG	ID:bwa	PN:bwa	VN:2.0	CL:bwa-mem2 mem -t 32 /project/legume_project/roshan.kulkarni/CAPG_demo/refB.fa /project/legume_project/roshan.kulkarni/CAPG_demo/SRR4124062_1.fastq /project/legume_project/roshan.kulkarni/CAPG_demo/SRR4124062_2.fastq
+@PG	ID:samtools	PN:samtools	PP:bwa	VN:1.10	CL:samtools sort -o /project/legume_project/roshan.kulkarni/CAPG_demo/SRR4124062_B.sam

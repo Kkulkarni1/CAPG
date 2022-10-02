@@ -1,25 +1,50 @@
 # Example real data analysis pipeline:
 
 In the CAPG manuscript, we collected WGS data from fourteen peanut accessions, aligned them to the [Tifrunner reference](https://www.ncbi.nlm.nih.gov/data-hub/genome/GCF_003086295.2/), and genotyped 1,000 selected target regions.
-Here, we demonstrate a small portion of the analysis.
+Here, we demonstrate a small portion of the analysis. For this example, chr 1 and chr 11 of the [Tifrunner assembly](https://peanutbase.org/data/v2/Arachis/hypogaea/genomes/Tifrunner.gnm2.J5K5/) is used as refA.fa and refB.fa. 
+ 
 All commands are run from the top directory of the github repository.
 **Unfortunately, the following demonstration does not work because of a disagreement between the Tifrunner assembly and the version we used. We are working on it.**
 
 - Big data files are not stored on the github repository, so the first step is to download the files you will need to run this example.
 
-	- Download the [Tifrunner assembly](https://api.ncbi.nlm.nih.gov/datasets/v1/genome/accession/GCF_003086295.2/download?filename=GCF_003086295.2.zip) and overwrite the github stubs for the subgenomic reference sequences:
+	- Download the fastq file
 	```
-	wget https://api.ncbi.nlm.nih.gov/datasets/v1/genome/accession/GCF_003086295.1/download?filename=GCF_003086295.1.zip GCF_003086295.1.zip
-	cat ncbi_dataset/data/GCF_003086295.2/chrArahy.0[1-9].fna ncbi_dataset/data/GCF_003086295.2/chrArahy.10.fna | awk -f script_analysis/chg_names.awk > data/peanut/tet_A.fa	# overwrite github stub
-	cat ncbi_dataset/data/GCF_003086295.2/chrArahy.1[1-9].fna ncbi_dataset/data/GCF_003086295.2/chrArahy.20.fna | awk -f script_analysis/chg_names.awk > data/peanut/tet_B.fa	# overwrite github stub
+	wget https://trace.ncbi.nlm.nih.gov/Traces/?view=run_browser&acc=SRR4124062&display=download
 	```
-	- Download the target-aligned SRR4124062 reads from [OSF storage](https://osf.io/uezgp/files/osfstorage):
-	```
-	wget https://osf.io/download/631d4476db9397378e11f644/ data/peanut/sam/SRR4124062_A.subset.bam
-	wget https://osf.io/download/631d44929a7d513523903ae0/ data/peanut/sam/SRR4124062_B.subset.bam
-	samtools view -h data/peanut/sam/SRR4124062_A.subset.bam data/peanut/sam/SRR4124062_A.subset.sam	# overwrite github stub
-	samtools view -h data/peanut/sam/SRR4124062_B.subset.bam data/peanut/sam/SRR4124062_B.subset.sam	# overwrite github stub
-	```
+        OR by using SRA toolkit
+        ```
+        fasterq-dump --split-files SRR4124062
+        ```
+- Install the following packages:
+	- bwa2 or any aligner of your choice
+	- samtools
+        - bioawk
+        - Mummer4
+
+- Perform alignment of example fastq with reference A and B genome using bwa mem2 (You can install bwa2 or any aligner of your choice)
+```
+bwa2 index data/peanut/refA.fa
+bwa2 index data/peanut/refB.fa
+bwa2 mem data/peanut/refA.fa data/peanut/SRR4124062_1.fastq data/peanut/SRR4124062_2.fastq | samtools sort -o data/peanut/sam/SRR4124062_A.bam
+bwa2 mem data/peanut/refB.fa data/peanut/SRR4124062_1.fastq data/peanut/SRR4124062_2.fastq | samtools sort -o data/peanut/sam/SRR4124062_B.bam 
+```
+
+- Generate reference sam file
+```
+nucmer --sam-long=peanut_ref --mum data/peanut/refA.fa data/peanut/refB.fa
+bioawk -c fastx '{ print "@SQ " "SN:" $name, "LN:" length($seq) }' < data/peanut/refA.fa > header.txt
+cat data/peanut/header.txt data/peanut/peanut_ref.sam
+```
+
+- Subset the sam files according to the target region of interest (10 target regions have been selected in targets.txt for this demonstartion)
+```
+cat /data/peanut/targets.txt | awk -F "[\t : -]" '{ printf "%s\t%s\t%s\n", $2,$3,$4}' > /data/peanut/subset_A.bed
+cat /data/peanut/targets.txt | awk -F "[\t : -]" '{ printf "%s\t%s\t%s\n", $5,$6,$7}' > /data/peanut/subset_B.bed
+samtools view -h -L /data/peanut/subset_A.bed > data/peanut/sam/SRR4124062_A_subset.bam
+samtools view -h -L /data/peanut/subset_B.bed > data/peanut/sam/SRR4124062_B_subset.bam
+```
+
 - Now you are ready to run the genotyping pipeline.
 There is nothing pretty about this pipeline, but it gets the job done for now.
 ```

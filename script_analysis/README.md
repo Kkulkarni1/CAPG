@@ -8,21 +8,22 @@ All commands are run from the top directory of the github repository.
 
 - Big data files are not stored on the github repository, so the first step is to download the files you will need to run this example.
 
-	- Download the fastq file
+	- Download the fastq file using `wget`
 	```
 	wget https://trace.ncbi.nlm.nih.gov/Traces/?view=run_browser&acc=SRR4124062&display=download
 	```
-        OR by using SRA toolkit
+
+        OR the SRA toolkit
         ```
         fasterq-dump --split-files SRR4124062
         ```
 - Install the following packages:
-	- bwa2 or any aligner of your choice
+	- bwa2 or an aligner of your choice
 	- samtools
-        - bioawk
-        - Mummer4
+	- bioawk
+	- Mummer4
 
-- Perform alignment of example fastq with reference A and B genome using bwa mem2 (You can install bwa2 or any aligner of your choice)
+- Perform alignment of example fastq with reference A and B genome using `bwa2 mem` (or using your choice of aligner)
 ```
 bwa2 index data/peanut/refA.fa
 bwa2 index data/peanut/refB.fa

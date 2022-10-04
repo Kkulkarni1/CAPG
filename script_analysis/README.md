@@ -18,10 +18,10 @@ All commands are run from the top directory of the github repository.
         fasterq-dump --split-files SRR4124062
 
 - Install the following packages:
-	- bwa2 or an aligner of your choice
-	- samtools
-	- bioawk
-	- Mummer4
+	- [bwa2](https://github.com/bwa-mem2/bwa-mem2) or an aligner of your choice
+	- [samtools](https://www.htslib.org/)
+	- [bioawk](https://github.com/lh3/bioawk)
+	- [Mummer4](https://github.com/marbl/MUMmer3)
 
 - Perform alignment of example fastq with reference A and B genome using `bwa2 mem` (or using your choice of aligner)
 ```

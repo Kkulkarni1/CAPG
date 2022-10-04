@@ -12,6 +12,7 @@ All commands are run from the top directory of the github repository.
 
 	```
 	wget https://trace.ncbi.nlm.nih.gov/Traces/?view=run_browser&acc=SRR4124062&display=download
+	```
 
 	<!-- -->
         fasterq-dump --split-files SRR4124062

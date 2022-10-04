@@ -38,7 +38,7 @@ bioawk -c fastx '{ print "@SQ " "SN:" $name, "LN:" length($seq) }' < data/peanut
 cat data/peanut/header.txt data/peanut/peanut_ref.sam
 ```
 
-- Subset the sam files according to the target region of interest (10 target regions have been selected in targets.txt for this demonstartion)
+- Subset the sam files according to the target region of interest (10 target regions have been provided in `targets.txt` for this demonstration).
 ```
 cat /data/peanut/targets.txt | awk -F "[\t : -]" '{ printf "%s\t%s\t%s\n", $2,$3,$4}' > /data/peanut/subset_A.bed
 cat /data/peanut/targets.txt | awk -F "[\t : -]" '{ printf "%s\t%s\t%s\n", $5,$6,$7}' > /data/peanut/subset_B.bed

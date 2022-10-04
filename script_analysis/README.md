@@ -16,7 +16,6 @@ All commands are run from the top directory of the github repository.
 
 	<!-- -->
         fasterq-dump --split-files SRR4124062
-        ```
 
 - Install the following packages:
 	- bwa2 or an aligner of your choice

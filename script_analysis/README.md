@@ -9,14 +9,17 @@ All commands are run from the top directory of the github repository.
 - Big data files are not stored on the github repository, so the first step is to download the files you will need to run this example.
 
 	- Download the fastq file using `wget`
+
 	```
 	wget https://trace.ncbi.nlm.nih.gov/Traces/?view=run_browser&acc=SRR4124062&display=download
 	```
 
         OR the SRA toolkit
+
         ```
         fasterq-dump --split-files SRR4124062
         ```
+
 - Install the following packages:
 	- bwa2 or an aligner of your choice
 	- samtools

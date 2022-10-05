@@ -12,10 +12,10 @@ parent.dir <- '.'			# OUTPUT: CAPG repository top level directory
 sim.dir <- 'data/simulation'
 out.dir <-				# OUTPUT: where the metric files go
 	 paste(parent.dir, '/data/simulation/results', sep='')
-homoeo_rates <- c(0.005, 0.007)		# homoeologous rates (CAPG manuscript: c(0.005, 0.007, 0.010))
-covg_rates <- c(5, 10)			# coverage rate (CAPG manuscript: c(5, 10, 20), only 20 for 0.005 and 0.010)
+homoeo_rates <- c(0.005)	#, 0.007)		# homoeologous rates (CAPG manuscript: c(0.005, 0.007, 0.010))
+covg_rates <- c(5)	#, 10)			# coverage rate (CAPG manuscript: c(5, 10, 20), only 20 for 0.005 and 0.010)
 mm_rates <- c(0.000, 0.001, 0.010)	# mismatch rate (CAPG manuscript with error: c(0.000, 0.000, 0.010)
-n.indiv <- 1				# number of individuals (CAPG manuscript: 50)
+n.indiv <- 50				# number of individuals (CAPG manuscript: 50)
 info.dir <- 'info'			# INPUT: where info files are stored
 tail <- ".txt"				# OUTPUT: file extension
 

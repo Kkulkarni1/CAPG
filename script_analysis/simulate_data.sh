@@ -7,7 +7,7 @@
 # rates, and subgenome reference mismatche rate.
 #
 
-TEST=1					# test this code without doing anything
+TEST=0					# test this code without doing anything
 NCPU=7					# number of CPU allocated to this script
 
 OVERWRITE_SUBGENOMES=1			# simulate subgenomes again
@@ -17,16 +17,16 @@ OVERWRITE_REFERENCES=1			# simulate references from subgenomes again
 OVERWRITE_ALIGNMENTS=1			# simulate alignments from references and reads again
 
 CAPG_HOME=.				# where input and output should go
-SIMULATOR=$CAPG_HOME/script_main/wgs/release/capg_sim	# simulator executable		
+SIMULATOR=$CAPG_HOME/src/wgs/capg_sim	# simulator executable		
 SIM_DIR=$CAPG_HOME/data/simulation	# directory for simulation data
 REFERENCE="$SIM_DIR/refA.fsa"		# SIMULATOR: FASTA with simulated reference A
 ERR_FILE1="$SIM_DIR/miseq250R1.txt"	# ART: art_illumina error files	
 ERR_FILE2="$SIM_DIR/miseq250R2.txt"
 					# SIMULATOR: implement full factorial design on these variables
-HR_RATES="0.005 0.007"	 		# SIMULATOR: homoeologous SNP rate (manuscript: "0.005 0.007 0.100")
-COV_RATES="5 10"			# SIMULATOR: coverage rates per chromosome, twice this per subgenome (manuscript: "5 10 20" for hr = 0.007)
+HR_RATES="0.005" # 0.007"	 		# SIMULATOR: homoeologous SNP rate (manuscript: "0.005 0.007 0.100")
+COV_RATES="5" # 10"			# SIMULATOR: coverage rates per chromosome, twice this per subgenome (manuscript: "5 10 20" for hr = 0.007)
 MM_RATES="0.000 0.001 0.010"		# SIMULATOR: mismatch rate (manuscript w/ mistake: "0.00 0.00 0.01" labeled as "0.00 0.01 0.10")
-NREP=1					# SIMULATOR: number of genotypes to simulate (50)
+NREP=50					# SIMULATOR: number of genotypes to simulate (50)
 
 # simulation conditions: fixed parameters
 ALPHA=100		# SIMULATOR: allele proportions from Beta(ALPHA, BETA)

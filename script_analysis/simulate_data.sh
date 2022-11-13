@@ -2,31 +2,36 @@
 # @author Yudi Zhang, Karin S. Dorman, Roshan Kulkarni
 # @file simulate_data.sh
 #
-# Purpose: Simulate WGS data. This does 5% of the simulation run in CAPG
+# Purpose: Simulate WGS data. This does 10% of the simulation run in CAPG
 # manuscript but in a full factorial design over homoeologous rates, coverage
 # rates, and subgenome reference mismatche rate.
 #
+# Make sure:
+# SIMULATOR=$CAPG_HOME/scripts_main/wgs/capg_sim
+# TEST, OVERWRITE_*, HR_RATES, COV_RATES, NREP=5 correct
 
-TEST=1					# test this code without doing anything
+TEST=0					# test this code without doing anything
 NCPU=7					# number of CPU allocated to this script
 
+# all simulation start with a subgenome A reference
+# to start with an existing subgenome A and B reference, concatenate them in *mm0.000/ref.fsa (cat refA.fsa refB.fsa > ref.fsa) and set next line to 0
 OVERWRITE_SUBGENOMES=1			# simulate subgenomes again
 OVERWRITE_GENOMES=$OVERWRITE_SUBGENOMES	# simulate individual genomes again [WARNING: if overwriting subgenomes, it WILL overwrite sample!!]
 OVERWRITE_READS=1			# simulate reads from subgenomes again
 OVERWRITE_REFERENCES=1			# simulate references from subgenomes again
-OVERWRITE_ALIGNMENTS=1			# simulate alignments from references and reads again
+OVERWRITE_ALIGNMENTS=1			# simulate alignments from references and reads again: if either of above is 1, this should be 1
 
 CAPG_HOME=.				# where input and output should go
-SIMULATOR=$CAPG_HOME/script_main/wgs/release/capg_sim	# simulator executable		
+SIMULATOR=$CAPG_HOME/src/wgs/capg_sim	# simulator executable		
 SIM_DIR=$CAPG_HOME/data/simulation	# directory for simulation data
 REFERENCE="$SIM_DIR/refA.fsa"		# SIMULATOR: FASTA with simulated reference A
 ERR_FILE1="$SIM_DIR/miseq250R1.txt"	# ART: art_illumina error files	
 ERR_FILE2="$SIM_DIR/miseq250R2.txt"
 					# SIMULATOR: implement full factorial design on these variables
-HR_RATES="0.005 0.007"	 		# SIMULATOR: homoeologous SNP rate (manuscript: "0.005 0.007 0.100")
-COV_RATES="5 10"			# SIMULATOR: coverage rates per chromosome, twice this per subgenome (manuscript: "5 10 20" for hr = 0.007)
+HR_RATES="0.005 0.007 0.100" 		# SIMULATOR: homoeologous SNP rate (manuscript: "0.005 0.007 0.100")
+COV_RATES="5 10 20"			# SIMULATOR: coverage rates per chromosome, twice this per subgenome (manuscript: "5 10 20" for hr = 0.007)
 MM_RATES="0.000 0.001 0.010"		# SIMULATOR: mismatch rate (manuscript w/ mistake: "0.00 0.00 0.01" labeled as "0.00 0.01 0.10")
-NREP=1					# SIMULATOR: number of genotypes to simulate (50)
+NREP=5					# SIMULATOR: number of genotypes to simulate (50)
 
 # simulation conditions: fixed parameters
 ALPHA=100		# SIMULATOR: allele proportions from Beta(ALPHA, BETA)
@@ -58,6 +63,12 @@ function wait_on_finish {
 	done
 }
 
+if [ $OVERWRITE_READS -gt 0 ]; then
+	OVERWRITE_ALIGMENTS=1
+elif [ $OVERWRITE_REFERENCES -gt 0 ]; then
+	OVERWRITE_ALIGMENTS=1
+fi
+
 for hr in $HR_RATES
 do
 	PARENT_DIR="$SIM_DIR/homr${hr}mm0.000"	# folder where true subgenomes and individual genomes simulated
@@ -77,7 +88,7 @@ do
 			$CMD 2> $PARENT_DIR/truth_${hr}.txt
 		fi
 	# just simulate individual genomes with given allelic SNP rate, taking subgenomes from existing reference file
-	elif [ $OVERWRITE_GENOMES -ge 1 ]; then
+	elif [ ! -f "$PARENT_DIR/sample/indiv0.fsa" -o $OVERWRITE_GENOMES -ge 1 ]; then
 		CMD="$SIMULATOR -e $PARENT_DIR/ref.fsa -j $hr -g $ALLELIC_RATE -p 0.00 -a $ALPHA -b $BETA -s $RANDOM -o $PARENT_DIR/sample/indiv -f $PARENT_DIR/ref -r $PARENT_DIR/ref.sam -n $NREP"
         	# Simulating reference B genome, allotetraploid individuals and generating truth files
 		echo "$CMD 2> $PARENT_DIR/truth_${hr}.txt"
@@ -100,7 +111,7 @@ do
 		do
 			m=$((m-1))
 			# simulate reads
-			if [ ! -f "$PARENT_DIR/fastq/sim${m}.1.fq -o ! -f "$PARENT_DIR/fastq/sim${m}.2.fq -o $OVERWRITE_READS -ge 1 ]; then
+			if [ ! -f "$READ_DIR/sim${m}.1.fq" -o ! -f "$READ_DIR/sim${m}.2.fq" -o $OVERWRITE_READS -ge 1 ]; then
 				echo "art_illumina -1 $ERR_FILE1 -2 $ERR_FILE2 --len $READ_LEN --in $PARENT_DIR/sample/indiv${m}.fsa --out $READ_DIR/sim${m}. --fcov ${cov} --paired --mflen $FRAG_LEN_MEAN --sdev $FRAG_LEN_SD --rndSeed $RANDOM"
 				if [ $TEST == "0" ]; then
 					wait_on_cpu
@@ -116,6 +127,7 @@ do
 	do
 		REF_DIR="$SIM_DIR/homr${hr}mm${mm}"	# folder with references
 
+		# may need to simulate new references if there is a positive mismatch rate
 		if [ $(echo "$mm > 0" | bc) -gt 0 ]; then
 			if [ $TEST == "0" -a ! -d "$REF_DIR" ]; then
 				mkdir --parents $REF_DIR
@@ -130,6 +142,8 @@ do
 				echo "$CMD 2> $REF_DIR/truth_${hr}.txt"
 				if [ $TEST = "0" ]; then
 					$CMD 2> $REF_DIR/truth_${hr}.txt
+					rm $REF_DIR/refA.fsa.bwt
+					rm $REF_DIR/refB.fsa.bwt
 				fi
 			fi
 		fi

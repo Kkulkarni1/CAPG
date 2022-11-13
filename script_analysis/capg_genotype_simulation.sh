@@ -7,7 +7,7 @@ TEST=0					# test without doing anything
 NCPU=7					# number of CPUs to use
 OVERWRITE=1				# overwrite existing files
 CAPG_HOME=.				# CAPG home directory
-CAPG=$CAPG_HOME/script_main/wgs/release/capg_wgs	# CAPG executable
+CAPG=$CAPG_HOME/src/wgs/capg_wgs	# CAPG executable
 SIM_DIR=$CAPG_HOME/data/simulation	# simulation data
 REF_SAM=ref.sam				# INPUT: alignment of subgenomic references
 REFA_FSA=refA.fsa			# INPUT: subgenome reference A FASTA file
@@ -17,10 +17,10 @@ ERR_DIR=err				# OUTPUT: where to put stderr captured output
 VCF_DIR=vcf				# OUTPUT: where to put vcf files
 EXTRACTED_FSA_DIR=extracted		# OUTPUT: where to temporarily put extracted reference files
 INFO_DIR=info				# [NOT USED] OUTPUT: where to put info files
-HR_RATES="0.005 0.007"			# SIMULATOR: homoeologous SNP rate (manuscript: "0.005 0.007 0.100")
-COV_RATES="5 10"			# SIMULATOR: coverage rates per chromosome (manuscript: "5 10 20" for hr = 0.007)
+HR_RATES="0.005" # 0.007"			# SIMULATOR: homoeologous SNP rate (manuscript: "0.005 0.007 0.100")
+COV_RATES="5" # 10"			# SIMULATOR: coverage rates per chromosome (manuscript: "5 10 20" for hr = 0.007)
 MM_RATES="0.000 0.001 0.010"		# SIMULATOR: mismatch rate (manuscript w/ mistake: "0.00 0.00 0.01" labeled as "0.00 0.01 0.10")
-NREP=1					# SIMULATOR: number of genotypes to simulate (50)
+NREP=50					# SIMULATOR: number of genotypes to simulate (50)
 
 
 EXE=$(basename $CAPG)

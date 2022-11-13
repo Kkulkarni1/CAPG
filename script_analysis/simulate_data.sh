@@ -13,7 +13,7 @@
 TEST=0					# test this code without doing anything
 NCPU=7					# number of CPU allocated to this script
 
-# all simulation start with a subgenome A reference
+# all simulation start with a subgenome A reference (see REFERENCE)
 # to start with an existing subgenome A and B reference, concatenate them in *mm0.000/ref.fsa (cat refA.fsa refB.fsa > ref.fsa) and set next line to 0
 OVERWRITE_SUBGENOMES=1			# simulate subgenomes again
 OVERWRITE_GENOMES=$OVERWRITE_SUBGENOMES	# simulate individual genomes again [WARNING: if overwriting subgenomes, it WILL overwrite sample!!]
@@ -24,7 +24,7 @@ OVERWRITE_ALIGNMENTS=1			# simulate alignments from references and reads again: 
 CAPG_HOME=.				# where input and output should go
 SIMULATOR=$CAPG_HOME/src/wgs/capg_sim	# simulator executable		
 SIM_DIR=$CAPG_HOME/data/simulation	# directory for simulation data
-REFERENCE="$SIM_DIR/refA.fsa"		# SIMULATOR: FASTA with simulated reference A
+REFERENCE="$SIM_DIR/refA.fsa"		# SIMULATOR: FASTA with simulated reference A; not used if OVERWRITE_SUBGENOMES=0
 ERR_FILE1="$SIM_DIR/miseq250R1.txt"	# ART: art_illumina error files	
 ERR_FILE2="$SIM_DIR/miseq250R2.txt"
 					# SIMULATOR: implement full factorial design on these variables

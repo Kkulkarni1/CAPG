@@ -1,11 +1,13 @@
-cmake_minimum_required (VERSION 3.22.0)
+cmake_minimum_required(VERSION 3.3.0)
 
-project (CAPG VERSION 1.0.0)
+project(CAPG VERSION 1.0)
 
-SET(CMAKE_CC_COMPILER  gcc)
+set(CMAKE_C_COMPILER gcc)
+set(CMAKE_C_STANDARD 17)
 
-#set(CMAKE_BUILD_TYPE release)
-set(CMAKE_CXX_STANDARD 11)
+# -DCMAKE_BUILD_TYPE=Debug for debug version
+#set(CMAKE_BUILD_TYPE Release)	# this appears to be Release
+set(CMAKE_DEBUG_POSTFIX d)	# append d to executable names to signal it is debug version
 
 set(RMATH_PATH ".")
 
@@ -101,6 +103,8 @@ set(C_OBJ_SIM ./simulator.c ./sequence.c ./nuc.c ./qual.c ./error.c ./fastq.c ./
 #add_compile_options(-Wall -Wextra -pedantic)
 
 add_executable(capg_wgs ${C_OBJ})
+set_target_properties(capg_wgs PROPERTIES DEBUG_POSTFIX ${CMAKE_DEBUG_POSTFIX})
+target_link_libraries(capg_wgs -lm) # math
 
 find_rlib()
 message(STATUS "Found R: ${LIBR_EXECUTABLE}")
@@ -109,21 +113,19 @@ message(STATUS "Found R include directory: ${LIBR_INCLUDE_DIRS}")
 message(STATUS "Found R lib directory: ${LIBR_LIB_DIR}")
 if(LIBR_EXECUTABLE-NOTFOUND)
 else()
-	include_directories(${LIBR_INCLUDE_DIRS})
-	link_directories(${LIBR_LIB_DIR} ${RMATH_PATH})
-
 	add_executable(capg_sim ${C_OBJ_SIM})
+	set_target_properties(capg_sim PROPERTIES DEBUG_POSTFIX ${CMAKE_DEBUG_POSTFIX})
+
+	target_include_directories(capg_sim PUBLIC ${LIBR_INCLUDE_DIRS})
+	target_link_directories(capg_sim PUBLIC ${LIBR_LIB_DIR} ${RMATH_PATH})
 
 	# Rmath
 	find_library(RMATH_LIBRARY NAMES Rmath HINTS ${RMATH_PATH} ${LIBR_LIB_DIR} ${_LIBR_EXECUTABLE_DIR}/lib ${_LIBR_EXECUTABLE_DIR}/lib64)
 	find_package_handle_standard_args(LibRmath DEFAULT_MSG RMATH_LIBRARY)
 	if(RMATH_LIBRARY)
-		target_link_libraries(capg_sim ${RMATH_LIBRARY})
+		target_link_libraries(capg_sim PUBLIC ${RMATH_LIBRARY})
 	else()
 		message(FATAL_ERROR "Failed to find libRmath !")
 	endif()
-	TARGET_LINK_LIBRARIES(capg_sim -lm)
+	target_link_libraries(capg_sim PUBLIC -lm)
 endif()
-
-# math
-TARGET_LINK_LIBRARIES(capg_wgs -lm)

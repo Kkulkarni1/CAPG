@@ -1602,7 +1602,7 @@ int main(int argc, const char *argv[])
 						obs_q[n_cover] = get_qual(se->qual, se->read->len - obs_rpos[n_cover] - 1);
 						ref_base[1] = fds[1]->reads[fs_index[1] + target_b - rf_info->alignment_start[1]]; // need to reverse complement B
 						mls.pos = obs_rpos[n_cover];
-						max = covg_ll[0][n_cover] = ll[0][n_read]		/* adjusted log likelihood of A alignment */
+						max = covg_ll[0][n_cover] = ll[0][n_read]	/* adjusted log likelihood of A alignment */
 							- sub_prob_given_q_with_encoding(
 								 ref_base[0],			/* homozygous ref base */
 								 xy_to_rc[obs_nuc[n_cover]], IUPAC_ENCODING, XY_ENCODING, obs_q[n_cover], 1, (void *)&mls);

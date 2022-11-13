@@ -369,7 +369,7 @@ int load_data(simu_dat *dat, simu_options *opt, fastq_data *fds)
 			fprintf(stderr, "mm: %d: %d|%d\n", j, dat->seq_A[j], dat->ref_A[j]);
 	}
 
-	// ref A nad B in the same file for HMM method to use
+	// ref A and B in the same file for HMM method to use
 	FILE *fp = NULL;
 	size_t len = strlen(opt->fsa_file) + 4 + 1;
 	char *fsa_file = malloc(len);
